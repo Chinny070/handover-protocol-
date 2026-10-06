@@ -1,0 +1,4 @@
+# Runtime: handover_protocol.py itself only depends on the genlayer SDK,
+# which is supplied by the GenVM runtime at execution time (not pip-installed
+# here). This file exists for parity with the repository shape; there are no
+# additional runtime dependencies.

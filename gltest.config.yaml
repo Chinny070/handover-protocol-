@@ -1,0 +1,9 @@
+# gltest configuration (schema: networks / paths / environment — see
+# gltest_cli.config.types.UserConfig). Direct Mode tests (tests/direct/)
+# need neither a running node nor these network settings; this file only
+# matters once Studio Mode / Studionet integration tests
+# (tests/integration/) are implemented in a follow-on session.
+paths:
+  contracts: contracts
+  artifacts: artifacts
+environment: .env

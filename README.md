@@ -1,0 +1,161 @@
+# Handover Protocol
+
+**Consensus-backed condition and custody certificates for physical
+assets.**
+
+A reusable GenLayer Intelligent Contract primitive that freezes an
+accepted physical-asset condition baseline at handover, tracks custody and
+defect lineage across every subsequent custody interval, distinguishes
+normal wear from material change, attributes supported changes to custody
+intervals **without claiming legal causation**, verifies repairs, and
+exposes a portable, machine-readable condition certificate for downstream
+contracts.
+
+## Problem
+
+Every rental, lease, equipment loan, or shared-vehicle dispute reduces to
+the same question: *what changed while this was in someone else's
+custody, and how confident can we be about when it changed?* Today that
+question is answered (if at all) by unverifiable photos, memory, and
+goodwill. Handover Protocol answers it with consensus-backed, typed,
+append-only state.
+
+## Why GenLayer
+
+Classifying condition change, matching a defect to prior history,
+deciding whether a change is normal wear or material damage, judging
+evidence sufficiency, and deciding whether a repair receipt resolves a
+defect are all **irreducible semantic judgments** over free-form evidence
+text — no deterministic rule can safely make these calls. Everything else
+(IDs, custody bookkeeping, bounds, state transitions, certificate
+assembly) is ordinary deterministic code. See `DECISION.md` → "the
+delete-GenLayer test".
+
+## Delete GenLayer: what breaks?
+
+Classifying a component's condition from inspection text, matching an
+observation to an existing defect, judging normal-wear-vs-material under a
+frozen policy, and judging whether repair evidence resolves a defect — all
+of that breaks. ID assignment, ownership/custody bookkeeping, bound
+enforcement, and certificate computation keep working (in a
+trust-nothing, non-consensus-backed way).
+
+## Why this is not a rejected pattern
+
+This is not a generic "AI oracle" or a rental marketplace. See
+`DECISION.md` for the explicit differentiation from Agent Warranty
+Protocol, Decision Memory Protocol, Reality Checkpoint Protocol, and
+Provenance Engine, and the three-consumer test proving the certificate is
+genuinely reusable (`docs/INTEGRATION.md`).
+
+## State machine
+
+```text
+Asset + Component Graph
+        |
+Frozen Baseline + Wear Policy
+        |
+Receiver Acceptance
+        |
+Custody Interval
+        |
+Return Evidence
+        |
+Independent GenLayer Evaluation
+        |
+Condition Delta
+        |
+Defect Identity + Temporal Attribution
+        |
+Repair / Challenge
+        |
+Portable Condition Certificate
+```
+
+Full handover/defect/repair state machines: `docs/ARCHITECTURE.md`,
+`docs/CONDITION_MODEL.md`, `docs/DEFECT_LINEAGE.md`, `docs/REPAIRS.md`.
+
+## Contract surface
+
+Writes: `register_asset, add_component, seal_asset_definition,
+propose_handover, add_baseline_evidence, accept_baseline, dispute_baseline,
+begin_custody, delegate_custody, mark_custody_gap, submit_return_evidence,
+evaluate_return, challenge_finding, submit_repair, verify_repair,
+close_handover, cancel_handover`.
+
+Views: `get_asset, get_component, get_handover, get_active_custodian,
+get_custody_chain, get_defect, get_defect_history, get_open_defect_count,
+get_condition_certificate, is_handover_clear`.
+
+## Nondeterministic operations
+
+Exactly three call sites touch `gl.nondet.*`: evidence retrieval
+(`gl.nondet.web.get`), per-component condition/defect/attribution
+classification, and repair-receipt classification (both via
+`gl.nondet.exec_prompt`). Both are wrapped in a **custom**
+`gl.vm.run_nondet_unsafe(leader_fn, validator_fn)` consensus call — not
+`strict_eq` over raw prose — where the validator independently re-derives
+the same typed finding and compares only decision-critical fields. See
+`docs/CONSENSUS.md`.
+
+## Deterministic responsibilities
+
+IDs, ownership/caller checks, custody-overlap and delegation-scope
+enforcement, all numeric bounds, defect lifecycle transitions, checkpoint/
+digest assembly, and certificate field computation. See
+`docs/INVARIANTS.md` (18 named invariants, each covered by a test).
+
+## Equivalence / validator design
+
+See `docs/CONSENSUS.md`. Proven directly with six forged-leader rejection
+cases plus one honest-acceptance sanity check in
+`tests/direct/test_handover_consensus.py`, using `gltest`'s
+`direct_vm.run_validator` cheatcode.
+
+## Safety / failure semantics
+
+Every malformed/adversarial model output and every unreachable evidence
+source fails closed (never to a positive, damage-free, or repair-success
+outcome). See `docs/SECURITY.md`, `docs/INVARIANTS.md` (HP14, HP18), and
+the 15-test adversarial-parsing matrix in
+`tests/direct/test_handover_hardening.py`.
+
+## Reuse surface
+
+Three sketched downstream consumers (deposit refund, insurance
+eligibility, resale trust score), each reading only
+`get_condition_certificate`/`is_handover_clear`/`get_custody_chain` with no
+web/LLM/consensus logic of their own: `docs/INTEGRATION.md`.
+
+## Limitations
+
+- No economics (payments/escrow/deposits/slashing) in v1 by design.
+- No image/vision verification claimed as load-bearing (HP17).
+- Challenge re-evaluation (`_classify_challenge`) is a conservative
+  deterministic placeholder pending fresh-evidence wiring — see
+  `docs/DEFECT_LINEAGE.md`.
+- Not yet deployed to Studionet — see `docs/DEPLOYMENT.md`.
+
+## Verification
+
+**Direct Mode: 46/46 tests passing.** See
+`docs/RELEASE_CANDIDATE_VERIFICATION.md` for the exact command, counts,
+versions, and an honest list of what was *not* run this session (live
+deployment, GenVM schema/lint against a running node, Studionet
+integration tests).
+
+```bash
+py -3.12 -m venv .venv-test
+.venv-test\Scripts\Activate.ps1   # or: source .venv-test/bin/activate
+python -m pip install -r requirements-test.txt
+pytest tests/direct/ -v
+```
+
+## Reviewer fast path
+
+1. Read `DECISION.md` (why this primitive, why GenLayer, differentiation).
+2. Read `docs/INVARIANTS.md` (18 invariants; grep test files for the `HP`
+   tag referenced in each test's docstring/comment).
+3. Run `pytest tests/direct/ -v` (46 tests, no network/deployment needed).
+4. Read `docs/CONSENSUS.md` and `tests/direct/test_handover_consensus.py`
+   for the forged-leader proof.
