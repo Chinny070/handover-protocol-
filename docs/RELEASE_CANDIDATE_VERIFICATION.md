@@ -53,11 +53,11 @@ throughout `contracts/handover_protocol.py`:
 ## Direct Mode: green
 
 ```text
-collected: 46
-passed: 46
+collected: 47
+passed: 47
 failed: 0
 skipped: 0
-duration: ~13-14s (full suite, warm SDK cache)
+duration: ~13-15s (full suite, warm SDK cache)
 Python: 3.12.10
 genlayer-test: 0.29.2
 command: pytest tests/direct/ -v
@@ -83,9 +83,10 @@ Breakdown by file:
   evidence-id-shaped field, invented matched-defect-id, oversized
   rationale list, non-dict payload, empty string payload, prompt-injection
   text proven inert).
-- `test_handover_consensus.py` — 7 passed (five distinct forged-leader
-  rejection cases via `direct_vm.run_validator`, plus one honest-leader
-  acceptance sanity check).
+- `test_handover_consensus.py` — 8 passed (six distinct forged-leader
+  rejection cases via `direct_vm.run_validator` — including a
+  `matched_defect_id`-mismatch case found and fixed during post-build
+  review — plus one honest-leader acceptance sanity check).
 - `test_handover_repairs.py` — 5 passed (repaired, not-repaired reopening,
   external-failure-is-not-repaired-or-failure, bounded repair rounds,
   re-submission gating).

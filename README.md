@@ -138,7 +138,7 @@ web/LLM/consensus logic of their own: `docs/INTEGRATION.md`.
 
 ## Verification
 
-**Direct Mode: 46/46 tests passing.** See
+**Direct Mode: 47/47 tests passing.** See
 `docs/RELEASE_CANDIDATE_VERIFICATION.md` for the exact command, counts,
 versions, and an honest list of what was *not* run this session (live
 deployment, GenVM schema/lint against a running node, Studionet
@@ -156,6 +156,6 @@ pytest tests/direct/ -v
 1. Read `DECISION.md` (why this primitive, why GenLayer, differentiation).
 2. Read `docs/INVARIANTS.md` (18 invariants; grep test files for the `HP`
    tag referenced in each test's docstring/comment).
-3. Run `pytest tests/direct/ -v` (46 tests, no network/deployment needed).
+3. Run `pytest tests/direct/ -v` (47 tests, no network/deployment needed).
 4. Read `docs/CONSENSUS.md` and `tests/direct/test_handover_consensus.py`
    for the forged-leader proof.

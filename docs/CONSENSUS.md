@@ -37,10 +37,16 @@ proves the validator is not simply hostile-by-default). It then:
    (`_validate_finding_shape`): known enums only, real booleans only,
    `matched_defect_id` must be `""` or a real open-defect candidate for
    that component.
-4. Compares only the **critical fields** between its own and the leader's
+4. Compares the **critical fields** between its own and the leader's
    finding, component by component:
    `component_id, condition_class, defect_relation, severity, normal_wear,
-   evidence_sufficient, external_failure, attribution_class`.
+   evidence_sufficient, external_failure, attribution_class`, **plus**
+   `matched_defect_id` — not itself in `CRITICAL_FIELDS`, but still
+   decision-critical because it selects which stored defect record gets
+   mutated to `WORSENED`. A leader that agrees on every typed field but
+   points `matched_defect_id` at a different, still-valid candidate defect
+   for the same component is rejected (HP4, HP7; see
+   `test_forged_leader_matches_wrong_candidate_defect_is_rejected`).
    `rationale_codes` and any other prose/explanatory content are
    explicitly *not* compared — they cannot change contract state, so
    stylistic divergence between leader and validator text must not cause a
@@ -71,7 +77,10 @@ rejection for:
 - smuggling an unknown enum value (`"TOTALED"`);
 - using a truthy string instead of a real boolean for `normal_wear`;
 - claiming `SUPPORTED_AS_NEW_IN_INTERVAL` attribution when a custody gap
-  is present (the validator's honest answer is `CUSTODY_GAP`).
+  is present (the validator's honest answer is `CUSTODY_GAP`);
+- matching every critical field honestly but pointing `matched_defect_id`
+  at a different, still-valid candidate defect for the same component
+  (`test_forged_leader_matches_wrong_candidate_defect_is_rejected`).
 
 A final test (`test_honest_leader_result_is_accepted`) proves the validator
 is not merely rejecting everything — an honest, matching leader result is
