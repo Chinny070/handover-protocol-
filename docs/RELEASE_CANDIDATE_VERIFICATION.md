@@ -25,13 +25,15 @@ verification" rule.
 
 A fresh `gh repo clone Chinny070/handover-protocol-` into a separate
 directory, a fresh `python -m venv .venv-test`, a plain
-`pip install -r requirements-test.txt`, then `pytest tests/ -v`: **55
-passed, 1 skipped**, identical to the primary working tree. No
-local-machine state, cached account, or absolute path outside
+`pip install -r requirements-test.txt`, then `pytest tests/ -v`: **78
+passed, 1 skipped**, identical to the primary working tree. Re-verified
+after adding the `eth-keys` test dependency for signature-fixture signing
+(item 3) — it installs cleanly from `requirements-test.txt` with no extra
+steps. No local-machine state, cached account, or absolute path outside
 `scripts/gl_write.js` (which resolves the `genlayer` CLI's install
 directory dynamically via `npm root -g`, overridable via
 `GENLAYER_CLI_DIR`, rather than hardcoding a path) is required to
-reproduce the Direct Mode suite.
+reproduce the Direct Mode + read-only integration suite.
 
 ## API verified empirically (not assumed from the spec's example syntax)
 
