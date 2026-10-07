@@ -7,7 +7,9 @@ by GenLayer validators via gl.nondet.web.get. Not a real inspection.
 Component: front_bumper
 Return inspection, end of custody interval.
 
-The front bumper now has a large visible crack running across its lower
-left section, roughly 20cm long, with the paint cracked and separated
-along the damage. This was not present at baseline. The damage appears
-consistent with a moderate impact, not ordinary cosmetic wear.
+The front bumper now has a large, severe structural crack running across
+its entire lower left section, roughly 20cm long, with the plastic
+visibly split through and the paint shattered along the break. This is
+clearly serious, major damage, well beyond any cosmetic scuff or scratch.
+It was not present at baseline. This is new damage, not a pre-existing
+defect, and it is unambiguously outside any normal cosmetic wear budget.
