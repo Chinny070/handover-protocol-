@@ -278,6 +278,72 @@ def test_evaluate_return_http_404_is_deterministically_unavailable(direct_vm):
     assert status == "EVIDENCE_UNAVAILABLE"
 
 
+def test_content_hash_mismatch_fails_closed_to_unavailable(direct_vm):
+    """When content_hash is submitted in strict 64-hex sha256-digest form,
+    _fetch_text verifies it against the actually-fetched bytes
+    (section: "bind fetched bytes to a verified digest"). A mismatch is
+    treated as a fetch failure, not a damage finding -- proven here by
+    registering no LLM mock: if the mismatch were ignored and the body
+    were fed to the model anyway, this test would hang/error on an
+    unmocked call instead of asserting the wrong status."""
+    import hashlib
+
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    renter = create_address("renter")
+    cid = comps["bumper"]
+    hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
+    direct_vm.sender = renter
+    c.accept_baseline(handover_id=hid)
+    c.begin_custody(handover_id=hid)
+
+    actual_body = "The real inspection text."
+    wrong_hash = hashlib.sha256(b"not the real body").hexdigest()
+    direct_vm.mock_web("example.com/hash-mismatch", {"status": 200, "body": actual_body})
+    c.submit_return_evidence(
+        handover_id=hid,
+        evidence_kind="WEB_RENDERED_INSPECTION",
+        source_url="https://example.com/hash-mismatch",
+        content_hash=wrong_hash,
+        component_ids=[cid],
+        assurance_tier="SELF_REPORTED",
+    )
+    status = c.evaluate_return(handover_id=hid)
+    assert status == "EVIDENCE_UNAVAILABLE"
+
+
+def test_content_hash_match_is_verified_and_evidence_accepted(direct_vm):
+    """The same strict-format content_hash, when it genuinely matches the
+    fetched bytes, must not block the finding -- this proves the digest
+    check is a real comparison, not something that always fails closed
+    regardless of correctness."""
+    import hashlib
+
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    renter = create_address("renter")
+    cid = comps["bumper"]
+    hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
+    direct_vm.sender = renter
+    c.accept_baseline(handover_id=hid)
+    c.begin_custody(handover_id=hid)
+
+    actual_body = "No visible change."
+    correct_hash = hashlib.sha256(actual_body.encode("utf-8")).hexdigest()
+    direct_vm.mock_web("example.com/hash-match", {"status": 200, "body": actual_body})
+    direct_vm.mock_llm(".*", finding())
+    c.submit_return_evidence(
+        handover_id=hid,
+        evidence_kind="WEB_RENDERED_INSPECTION",
+        source_url="https://example.com/hash-match",
+        content_hash=correct_hash,
+        component_ids=[cid],
+        assurance_tier="SELF_REPORTED",
+    )
+    status = c.evaluate_return(handover_id=hid)
+    assert status == "RETURN_CLEAR"
+
+
 def test_close_handover_requires_terminal_state(direct_vm):
     owner = create_address("owner")
     c, aid, comps = make_sealed_asset(direct_vm, owner)

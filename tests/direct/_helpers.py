@@ -1,11 +1,34 @@
 """Shared Direct Mode test helpers (not collected as tests themselves)."""
 
+import hashlib
 import json
 from pathlib import Path
 
 from gltest.direct import deploy_contract, create_address
 
 CONTRACT_PATH = Path(__file__).resolve().parents[2] / "contracts" / "handover_protocol.py"
+
+# A fixed test keypair standing in for a "trusted inspector" (section:
+# "verify signatures/attestations for high-assurance evidence"). Test-only
+# private key, never used for anything real; eth_keys is a test dependency
+# used only to produce valid signatures for the contract's pure-Python
+# secp256k1 verifier to check -- the contract itself never signs anything,
+# only verifies.
+from eth_keys import keys as _eth_keys
+
+TEST_INSPECTOR_PRIVATE_KEY = _eth_keys.PrivateKey(b"\x11" * 32)
+TEST_INSPECTOR_PUBKEY_HEX = ("04" + TEST_INSPECTOR_PRIVATE_KEY.public_key.to_bytes().hex())
+
+
+def sign_as_inspector(evidence_kind: str, source_url: str, content_hash: str):
+    """Signs the exact canonical message contracts/handover_protocol.py's
+    _inspector_signing_message constructs, so the contract's verifier
+    accepts it. Returns (pubkey_hex, sig_r_hex, sig_s_hex)."""
+    message = f"{evidence_kind}|{source_url}|{content_hash}".encode("utf-8")
+    digest = hashlib.sha256(message).digest()
+    sig = TEST_INSPECTOR_PRIVATE_KEY.sign_msg_hash(digest)
+    return TEST_INSPECTOR_PUBKEY_HEX, hex(sig.r), hex(sig.s)
+
 
 DEFAULT_POLICY = {
     "component_rules": {"bumper": "cosmetic", "engine": "functional"},
@@ -18,6 +41,7 @@ DEFAULT_POLICY = {
     "attribution_minimums": {"supported": ["WEB_RENDERED_INSPECTION"]},
     "repair_closure_requirements": {"receipt": True},
     "challenge_window": 3,
+    "trusted_inspectors": [TEST_INSPECTOR_PUBKEY_HEX],
 }
 
 

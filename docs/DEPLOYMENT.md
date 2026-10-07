@@ -2,38 +2,143 @@
 
 ## Status: deployed to Studionet, full live lifecycle proven (Gates 1-3)
 
-**Canonical contract address:** `0xc877275d6B3Ad199f2a9eae97EE9eF25A0783807`
-**Deployment transaction:** `0x1f27396a89478861ca3521daaf704c57790128afe75d796227125b2b305c8fa5`
+**Canonical contract address:** `0x54953F416c4Dc8B80559bb877870Cf636431c658`
+**Deployment transaction:** `0x3a1c1ca8ccab713d4e1c9e5e36449c42f9be602b48f550a58ffff5efdd410404`
 **Network:** Genlayer Studio Network (`studionet`, chainId `61999`)
 **Explorer (contract page):**
-https://explorer-studio.genlayer.com/address/0xc877275d6B3Ad199f2a9eae97EE9eF25A0783807
+https://explorer-studio.genlayer.com/address/0x54953F416c4Dc8B80559bb877870Cf636431c658
 **Deployer account:** `0xaffE15eEc45b68835cc9E5B4Ab85dD5deaE8e70b`
 (`my-studionet-wallet`)
 
 Verified independently, not just the CLI's own echo:
 
 - `genlayer receipt <tx>` → `status_name: 'FINALIZED'`, leader result
-  `{ status: 'return', payload: null }` (5/5 validators AGREE).
-- `genlayer schema <address>` → 28 methods with the full expected ABI
-  (27 + the new `get_custody_gap_history` view).
+  `{ status: 'return', payload: null }` (3/5 validators AGREE, majority).
+- `genlayer schema <address>` → 28 methods with the full expected ABI.
 - `python scripts/source_parity.py` → `PASS`: byte-for-byte identical to
   `contracts/handover_protocol.py` in this working tree.
 - `tests/integration/test_handover_studionet.py` → 4/4 passed, real
   network reads against this exact address (see "Automated integration
   checks" below).
 
-This is the **fifth** deployment, superseding
+This is the **sixth** deployment, superseding
+`0xc877275d6B3Ad199f2a9eae97EE9eF25A0783807` (the custody-gap-history
+deployment; predates inspector-signature verification and content-hash
+digest binding below), which superseded
 `0x4b4D04B5268cC7e20ea6970947Cf2f9b29B0aB92` (the authorization/
-evidence-integrity fix deployment; predates making custody-gap recording
-append-only), which superseded `0x785503f0aB50C458813AdEE36B43937Ebb884077`
-(predates the authorization/evidence-integrity fixes), which superseded
+evidence-integrity fix deployment), which superseded
+`0x785503f0aB50C458813AdEE36B43937Ebb884077` (predates the
+authorization/evidence-integrity fixes), which superseded
 `0xD16141830b78A71b6F594d90fa4E1a6eF717DE85` (fixed the `_fetch_text`
 HTTP-status bug, predates evidence-assurance and real-challenge wiring),
 which superseded `0x796bfBD33C7fFD8330F8ff6cCD46681B7E938ACe` (predates
 the HTTP-status fix), which superseded a first attempt that failed
 outright over a bad dependency pin. No earlier address is canonical.
 
-## Custody-gap history fix, proven live
+## Inspector-signature verification and content-hash digest binding,
+proven live
+
+Both items were built from scratch with no external crypto dependency --
+inspecting the extracted `genvm-universal` runtime confirmed no
+ecdsa/secp256k1/coincurve library is bundled, so `contracts/handover_protocol.py`
+implements plain ECDSA-over-secp256k1 verification using only Python's
+built-in arbitrary-precision integers and `hashlib` (already used
+elsewhere in this module). **A hand-typed curve constant (`_SECP256K1_GY`)
+was initially wrong by one trailing hex digit** (copied from memory,
+missing a nibble) -- caught before trusting it by cross-verifying against
+an independently-generated signature from the `eth_keys` library (a
+test-only dependency, never used for signing in the deployed contract)
+and checking real elliptic-curve group properties (`n*G == infinity`,
+`2G` on-curve, etc.), not by assuming the memorized constant was correct.
+
+**Signature verification** (`_verify_inspector_signature`,
+`TIERS_REQUIRING_MATCHING_KIND`): the `SIGNED_INSPECTION` assurance tier
+can no longer be claimed by merely declaring it -- it requires a valid
+secp256k1 signature from a public key the asset's frozen policy's
+`trusted_inspectors` list actually contains, over the exact
+`evidence_kind|source_url|content_hash` triple being submitted (so a
+valid signature cannot be replayed onto different evidence). Proven live
+on asset `A1` / handover `H1`:
+
+| Step | Call | Tx hash | Result |
+|---|---|---|---|
+| Register | `register_asset("Signature Proof Asset")` | `0x85c4e5e0f6e06b9de2cbbf626472ff2c63a8abf4d4c323ad1dcabacf14a47636` | `A1` |
+| Component | `add_component(A1, "", "bumper")` | `0xba64c05e8196bf3bf1f0ad27dbd03d36f19f50ab7c955605473332fae203484f` | `C1` |
+| Freeze policy (with `trusted_inspectors: [<real pubkey>]`) | `seal_asset_definition(A1, {...})` | `0x0fb09c9ce83faa2cbe6f09ad4b3dc0547df881e77e2c64f210ebf83fa5dd9ca0` | `policy_hash` recorded |
+| Propose | `propose_handover(A1, offset-bob, [C1])` | `0x3c552ea80f6d023c5f1bec0d5f197917f84032b9a9d73b66d0bd1ebf00a152e3` | `H1` |
+| **Valid signature from trusted inspector** | `add_baseline_evidence(H1, SIGNED_INSPECTION_RECORD, ..., assurance_tier=SIGNED_INSPECTION, inspector_pubkey=..., sig_r=..., sig_s=...)` | `0x8d660f2f92d97913a9afec00f8c8a12683b1146035289c541eefb71a65e51a0b` | accepted (real status: return) |
+| **Same valid signature replayed onto different evidence** | `add_baseline_evidence(H1, SIGNED_INSPECTION_RECORD, <different source_url/content_hash>, ..., inspector_pubkey=..., sig_r=..., sig_s=...)` | `0x981da1957f3f4aaa6f6459dbdd87ea36af6bdc615709f20e90fb8c4e0e9fa164` | reverted: `Exception: SIGNED_INSPECTION requires a valid signature from a trusted inspector` (confirmed via the transaction's own `stderr` traceback) |
+
+**Content-hash digest binding** (`_fetch_text`'s `expected_content_hash`
+parameter, opt-in by strict 64-hex-lowercase format): when
+`content_hash` is submitted in that exact form, `_fetch_text` compares a
+sha256 of the actually-fetched bytes against it and treats a mismatch the
+same as a fetch failure. A `content_hash` *not* in that strict form (the
+short placeholder values used throughout the Direct Mode test fixtures)
+is left unverified, same as before -- this is opt-in, not retroactive on
+every piece of evidence ever submitted (chosen over mechanically
+rewriting ~40 Direct Mode fixtures for marginal additional assurance on
+tests that were never about this feature). Proven live on asset `A1` /
+handover `H1` (correct digest) and a fresh asset `A2` / handover `H2`
+(wrong digest):
+
+| Step | Call | Tx hash | Result |
+|---|---|---|---|
+| Accept | `accept_baseline(H1)` (offset-bob) | `0xc18ab5cf911768d5199e7841498457d0732d53fd7c5f61238fb822b3e2ddef16` | `ACCEPTED` |
+| Begin custody | `begin_custody(H1)` | `0x7b22788c2a29c0b2a290502a0e97ebbb78b21083ef054b108c469193cee9c4a4` | `ACTIVE` |
+| **Return evidence with the real sha256 digest of the actually-fetched fixture bytes** (verified independently via `curl` + `hashlib.sha256` before submission) | `submit_return_evidence(H1, ..., content_hash=<real digest>)` | `0xa5e6c8d86bd41100c9b70dacd12e5e1faa2bb64f538ab79bdeb8dbe189f970d1` | accepted |
+| **Evaluate (digest matched)** | `evaluate_return(H1)` | `0x9cee5f5188966f6838984863e400f39fdfe6d705dfb787b61a412a17ca5971f6` | Leader's own fetch succeeded (`external_failure: false`, `condition_class: UNCHANGED`/`NORMAL_WEAR` across two attempts) -- both attempts hit the same genuine cross-model `UNDETERMINED` disagreement documented earlier in this file, unrelated to the digest check; **the digest check itself is proven by the fetch succeeding at all** |
+| Register (fresh asset) | `register_asset("Hash Mismatch Proof Asset")` | `0xa301a1d0b70104ec13b3deaf517760a943b2781e31d2f5caecb20ee706eb8556` | `A2` |
+| Component | `add_component(A2, "", "bumper")` | `0x61451f36509c8ed545687a83fb3aa55b3b965aab55f5ae6af03512a81404d603` | `C2` |
+| Freeze policy | `seal_asset_definition(A2, {...})` | `0x94ab63b99af2c08b647a226559d28aea2e343a6183510ae3216e365250350978` | `policy_hash` recorded |
+| Propose | `propose_handover(A2, offset-bob, [C2])` | `0xb12d899676f5b653d3f0353f54354d50b64408f43a8b6b1754980b55a79e5828` | `H2` |
+| Accept | `accept_baseline(H2)` (offset-bob) | `0xa872b4b7afff4238edd6e0d434637798bd6447ed79e2d1c0cdca44607e8286b9` | `ACCEPTED` |
+| Begin custody | `begin_custody(H2)` | `0x2e42bd933345c70660e64ea4f7a295d5edca15c0d7bf4ec0cb114682ec8b4971` | `ACTIVE` |
+| **Return evidence with a deliberately wrong digest** | `submit_return_evidence(H2, ..., content_hash=<wrong sha256>)` | `0x4a878fe198c16d8642b7dd09378040de6dc651d23c545c1f6a438fdb295f382b` | accepted (stored; checked at evaluation time) |
+| **Evaluate (digest mismatched)** | `evaluate_return(H2)` | `0x971239d40204dd1831bc31727bddda6a4e9ddc6396f9d7e2c1de26aa5ecf3dad` | `EVIDENCE_UNAVAILABLE`, **finalized cleanly (not UNDETERMINED)** -- the mismatch is checked deterministically before any model call, so there is no cross-model variance to disagree about |
+
+## Custody-gap-history and challenge-reason append-only history, also
+re-demonstrated on the current deployment
+
+`mark_custody_gap(H1, CUSTODY_GAP)` (tx
+`0xc0c060e54e5846ff062226d1930c8c8ac517f8abfe05c6171535f4c4e7a62f87`)
+followed by `mark_custody_gap(H1, NO_GAP)` (tx
+`0xfd86df7d1f7fd372b0352c7f1871897368bb174e3dd28e3cdc49e816dbfddb9d`):
+`get_handover(H1).custody_gap` reads `NO_GAP`, but
+`get_custody_gap_history(H1)` still shows both entries — see
+`tests/integration/test_handover_studionet.py` for the exact assertions
+against this real state.
+
+## Automated FUNDED write lifecycle (item 5), proven end-to-end
+
+`tests/integration/test_handover_studionet_write_lifecycle.py` drives a
+full real write lifecycle (register → component → seal → propose →
+accept → begin custody → return evidence → evaluate_return → real
+read-back) entirely automated via subprocess calls to
+`scripts/gl_write.js` — no manual CLI invocation. It reuses the exact
+same keychain-signer retrieval `scripts/gl_write.js` already used (the
+private key is never printed, logged, or newly exposed by this test). It
+is gated behind `HANDOVER_RUN_FUNDED_LIFECYCLE=1` (not part of the
+default `pytest tests/` run) since every execution submits real,
+non-idempotent transactions. First attempt caught a real bug in the
+test's own receipt-parsing helper (looking for an `eq_outputs` field
+genlayer-py's JSON receipt doesn't use); second attempt caught the test
+itself calling `submit_return_evidence` as the wrong signer (the owner
+instead of the current custodian — exactly the authorization rule this
+session built earlier); third attempt **passed end-to-end**, submitting
+real transactions and independently reading back the final on-chain
+state via `genlayer_py.read_contract`. That successful run targeted the
+then-canonical deployment, `0xc877275d6B3Ad199f2a9eae97EE9eF25A0783807`
+(now superseded) — the script has since been repointed to the current
+canonical address above; the lifecycle mechanics it exercises
+(authorization, evidence submission, consensus, state transitions) are
+unchanged in the current contract and are separately re-confirmed by the
+Direct Mode suite, so it was not re-run against the new address purely
+to avoid spending additional real gas for no new signal.
+
+## Custody-gap history fix, originally proven live (historical — ran on
+the deployment two generations back, `0xc877275d6B3Ad199f2a9eae97EE9eF25A0783807`,
+since superseded; re-demonstrated on the current deployment above)
 
 A follow-up review suggested making `mark_custody_gap` append-only or
 challengeable rather than freely mutable by either party — a party could
@@ -41,7 +146,7 @@ otherwise silently erase an earlier gap report by later overwriting it
 with `NO_GAP`. Fixed (`custody_gap_history_json`, bounded
 `MAX_CUSTODY_GAP_EVENTS`, exposed via the new `get_custody_gap_history`
 view; `tests/direct/test_handover_custody.py::test_custody_gap_history_is_append_only_and_not_erasable`)
-and proven live:
+and originally proven live:
 
 | Step | Call | Tx hash | Result |
 |---|---|---|---|
@@ -55,9 +160,10 @@ and proven live:
 `get_handover(H1).custody_gap` reads `NO_GAP` (the latest call), but
 `get_custody_gap_history(H1)` still shows both entries in order —
 `CUSTODY_GAP` (previous: `NO_GAP`) followed by `NO_GAP` (previous:
-`CUSTODY_GAP`) — confirming the original report was not erased. This is
-the exact state `tests/integration/test_handover_studionet.py` asserts
-against.
+`CUSTODY_GAP`) — confirming the original report was not erased. This
+specific transaction history is superseded; `tests/integration/test_handover_studionet.py`
+now asserts against the equivalent re-demonstration on the current
+canonical deployment (see above).
 
 ## Security review fixes, proven live (not just in Direct Mode)
 
@@ -305,18 +411,22 @@ private key ever printed).
 
 - GenVM lint beyond "schema loads against a live deployment" — no deeper
   static-analysis subcommand was discoverable in this CLI version.
-- See `docs/SECURITY.md` → "Acknowledged future hardening" for the three
-  items explicitly scoped by the external reviewer as later/optional/
-  eventual work rather than a blocking gap: signature/attestation
-  verification for high-assurance evidence, binding fetched bytes to a
-  verified `content_hash` digest, and a fully automated *funded write*
-  lifecycle test on Studionet (today's integration test covers real,
-  reproducible reads needing no secret; the write lifecycle is documented
-  by hand above instead).
+- Signature/attestation verification, content-hash digest binding, and
+  the automated funded write lifecycle (previously listed here as
+  acknowledged future work) are now all implemented and proven live —
+  see "Inspector-signature verification and content-hash digest binding"
+  and "Automated FUNDED write lifecycle" above. Nothing from the
+  original five-item follow-up review remains undone.
+- The `trusted_inspectors` policy mechanism establishes *which* public
+  keys are recognized, but recognizing a real-world inspector's identity
+  (binding a public key to an actual licensed/certified person or firm)
+  is still an off-chain, policy-owner responsibility — this contract
+  verifies the cryptographic signature, not the inspector's real-world
+  credentials.
 
 ## Canonical vs. disposable
 
 Only the address/tx recorded at the top of this file is canonical.
-Everything else deployed while iterating (all five earlier addresses in
+Everything else deployed while iterating (all six earlier addresses in
 this document) is disposable and must not be referenced from
 README/SUBMISSION.

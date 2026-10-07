@@ -178,6 +178,138 @@ def _tier_allowed_for_kind(tier: str, kind: str) -> bool:
     return kind in TIERS_REQUIRING_MATCHING_KIND.get(tier, set())
 
 
+# ---------------------------------------------------------------------------
+# Pure-Python secp256k1 ECDSA verification (section: "verify signatures/
+# attestations for high-assurance evidence"). No external crypto library is
+# available in the current GenVM runtime (confirmed by inspecting the
+# extracted genvm-universal v0.2.16 package -- no ecdsa/secp256k1/coincurve
+# wheel is bundled; see docs/EVIDENCE.md). This implements plain ECDSA
+# verification over secp256k1 using only Python's built-in arbitrary-
+# precision integers and `hashlib` (already used elsewhere in this module
+# for digests), so it is deterministic and requires no additional
+# dependency. It never signs anything -- only verifies a signature a
+# caller supplies against a trusted inspector public key from the frozen
+# policy. MAX_TRUSTED_INSPECTORS bounds policy size (HP15).
+# ---------------------------------------------------------------------------
+
+_SECP256K1_P = 2**256 - 2**32 - 977
+_SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+_SECP256K1_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798
+_SECP256K1_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8
+
+MAX_TRUSTED_INSPECTORS = 16
+# 33-byte compressed (66 hex) or 65-byte uncompressed (130 hex) pubkey.
+INSPECTOR_PUBKEY_HEX_LENGTHS = (66, 130)
+
+
+def _ec_inv(a: int, m: int) -> int:
+    return pow(a, m - 2, m)
+
+
+def _ec_add(P, Q):
+    if P is None:
+        return Q
+    if Q is None:
+        return P
+    x1, y1 = P
+    x2, y2 = Q
+    p = _SECP256K1_P
+    if x1 == x2 and (y1 + y2) % p == 0:
+        return None
+    if P == Q:
+        lam = (3 * x1 * x1) * _ec_inv(2 * y1 % p, p) % p
+    else:
+        lam = (y2 - y1) * _ec_inv((x2 - x1) % p, p) % p
+    x3 = (lam * lam - x1 - x2) % p
+    y3 = (lam * (x1 - x3) - y1) % p
+    return (x3, y3)
+
+
+def _ec_scalar_mul(k: int, P):
+    R = None
+    while k:
+        if k & 1:
+            R = _ec_add(R, P)
+        P = _ec_add(P, P)
+        k >>= 1
+    return R
+
+
+def _decode_pubkey_hex(pubkey_hex: str):
+    """Returns an (x, y) point or None if malformed/not-on-curve."""
+    h = pubkey_hex.lower()
+    if h.startswith("0x"):
+        h = h[2:]
+    p = _SECP256K1_P
+    try:
+        if len(h) == 130 and h.startswith("04"):
+            x = int(h[2:66], 16)
+            y = int(h[66:130], 16)
+        elif len(h) == 66 and h[:2] in ("02", "03"):
+            x = int(h[2:66], 16)
+            y_sq = (x * x * x + 7) % p
+            y = pow(y_sq, (p + 1) // 4, p)
+            if (y % 2) != (int(h[:2], 16) % 2):
+                y = p - y
+            if (y * y) % p != y_sq:
+                return None
+        else:
+            return None
+    except ValueError:
+        return None
+    if not (0 <= x < p and 0 <= y < p):
+        return None
+    return (x, y)
+
+
+def _ecdsa_verify_secp256k1(pubkey_point, r: int, s: int, msg_hash: bytes) -> bool:
+    n = _SECP256K1_N
+    if not (1 <= r < n and 1 <= s < n):
+        return False
+    z = int.from_bytes(msg_hash, "big")
+    w = _ec_inv(s, n)
+    u1 = (z * w) % n
+    u2 = (r * w) % n
+    G = (_SECP256K1_GX, _SECP256K1_GY)
+    X = _ec_add(_ec_scalar_mul(u1, G), _ec_scalar_mul(u2, pubkey_point))
+    if X is None:
+        return False
+    return X[0] % n == r
+
+
+def _verify_inspector_signature(
+    trusted_pubkeys_hex: list, pubkey_hex: str, sig_r_hex: str, sig_s_hex: str, message: bytes
+) -> bool:
+    """True iff pubkey_hex is one of the policy's trusted inspectors AND
+    the signature validly signs `message` under that exact public key.
+    Both conditions are required -- a valid signature from an
+    unrecognized key proves nothing about trustworthiness, and a
+    recognized key without a valid signature proves nothing about this
+    specific evidence."""
+    if pubkey_hex not in trusted_pubkeys_hex:
+        return False
+    point = _decode_pubkey_hex(pubkey_hex)
+    if point is None:
+        return False
+    try:
+        r = int(sig_r_hex, 16)
+        s = int(sig_s_hex, 16)
+    except (ValueError, TypeError):
+        return False
+    import hashlib
+
+    digest = hashlib.sha256(message).digest()
+    return _ecdsa_verify_secp256k1(point, r, s, digest)
+
+
+def _inspector_signing_message(evidence_kind: str, source_url: str, content_hash: str) -> bytes:
+    """Canonical message an inspector signs over: binds the signature to
+    the exact evidence_kind/source_url/content_hash triple being
+    submitted, so a valid signature cannot be replayed onto different
+    evidence."""
+    return f"{evidence_kind}|{source_url}|{content_hash}".encode("utf-8")
+
+
 CRITICAL_FIELDS = (
     "component_id",
     "condition_class",
@@ -432,6 +564,21 @@ class HandoverProtocol(gl.Contract):
         if missing:
             raise Exception(f"policy missing keys: {sorted(missing)}")
 
+        # Optional: trusted inspector public keys for SIGNED_INSPECTION
+        # tier verification (see _verify_inspector_signature). Absent or
+        # empty means no evidence can ever clear SIGNED_INSPECTION for
+        # this asset -- there is no default "everyone is trusted" state.
+        trusted_inspectors = policy.get("trusted_inspectors", [])
+        if not isinstance(trusted_inspectors, list):
+            raise Exception("policy trusted_inspectors must be a list")
+        if len(trusted_inspectors) > MAX_TRUSTED_INSPECTORS:
+            raise Exception("policy trusted_inspectors exceeds bound (HP15)")
+        for pk in trusted_inspectors:
+            if not isinstance(pk, str) or len(pk.replace("0x", "", 1)) not in INSPECTOR_PUBKEY_HEX_LENGTHS:
+                raise Exception(f"malformed trusted inspector pubkey: {pk!r}")
+            if _decode_pubkey_hex(pk) is None:
+                raise Exception(f"trusted inspector pubkey is not a valid secp256k1 point: {pk!r}")
+
         policy_hash = self._digest(policy_json)
         asset.policy_hash = policy_hash
         asset.policy_json = policy_json
@@ -540,6 +687,9 @@ class HandoverProtocol(gl.Contract):
         content_hash: str,
         component_ids: list[str],
         assurance_tier: str,
+        inspector_pubkey: str = "",
+        sig_r: str = "",
+        sig_s: str = "",
     ) -> str:
         handover = self._get_handover(handover_id)
         self._require_handover_party(handover)
@@ -549,7 +699,8 @@ class HandoverProtocol(gl.Contract):
             raise Exception("unknown evidence kind")
 
         evidence_id = self._add_evidence(
-            handover, evidence_kind, source_url, content_hash, component_ids, assurance_tier
+            handover, evidence_kind, source_url, content_hash, component_ids, assurance_tier,
+            inspector_pubkey, sig_r, sig_s,
         )
         ids = self._json_list(handover.baseline_evidence_ids_json)
         if len(ids) >= MAX_EVIDENCE_PER_CHECKPOINT:
@@ -567,6 +718,9 @@ class HandoverProtocol(gl.Contract):
         content_hash: str,
         component_ids: list[str],
         assurance_tier: str,
+        inspector_pubkey: str = "",
+        sig_r: str = "",
+        sig_s: str = "",
     ) -> str:
         handover = self._get_handover(handover_id)
         if gl.message.sender_address != handover.to_party:
@@ -580,7 +734,8 @@ class HandoverProtocol(gl.Contract):
             raise Exception("unknown evidence kind")
 
         evidence_id = self._add_evidence(
-            handover, evidence_kind, source_url, content_hash, component_ids, assurance_tier
+            handover, evidence_kind, source_url, content_hash, component_ids, assurance_tier,
+            inspector_pubkey, sig_r, sig_s,
         )
         ids = self._json_list(handover.return_evidence_ids_json)
         if len(ids) >= MAX_EVIDENCE_PER_CHECKPOINT:
@@ -598,6 +753,9 @@ class HandoverProtocol(gl.Contract):
         content_hash: str,
         component_ids: list,
         assurance_tier: str,
+        inspector_pubkey: str = "",
+        sig_r: str = "",
+        sig_s: str = "",
     ) -> str:
         source_url = self._bound_text(source_url, MAX_NAME_CHARS * 4, "source_url")
         content_hash = self._bound_text(content_hash, 256, "content_hash")
@@ -605,6 +763,17 @@ class HandoverProtocol(gl.Contract):
             raise Exception("unknown assurance tier")
         if not _tier_allowed_for_kind(assurance_tier, evidence_kind):
             raise Exception(f"assurance tier {assurance_tier} is not claimable for evidence kind {evidence_kind}")
+        if assurance_tier == "SIGNED_INSPECTION":
+            # A caller cannot merely declare SIGNED_INSPECTION -- it must
+            # be backed by a valid signature from a public key the
+            # asset's frozen policy actually trusts, over this exact
+            # evidence_kind/source_url/content_hash triple. No default
+            # "everyone is trusted" state: an asset whose policy never set
+            # trusted_inspectors can never have evidence clear this tier.
+            trusted = json.loads(self.assets[handover.asset_id].policy_json).get("trusted_inspectors", [])
+            message = _inspector_signing_message(evidence_kind, source_url, content_hash)
+            if not _verify_inspector_signature(trusted, inspector_pubkey, sig_r, sig_s, message):
+                raise Exception("SIGNED_INSPECTION requires a valid signature from a trusted inspector")
         component_ids = list(component_ids)
         if not component_ids:
             raise Exception("evidence must reference at least one component")
@@ -757,18 +926,21 @@ class HandoverProtocol(gl.Contract):
 
         evidence_urls_by_component = {}
         evidence_tiers_by_component = {}
+        evidence_hashes_by_component = {}
         for eid in return_evidence_ids:
             ev = self.evidence[eid]
             for cid in self._json_list(ev.component_ids_json):
                 evidence_urls_by_component.setdefault(cid, []).append(ev.source_url)
                 evidence_tiers_by_component.setdefault(cid, []).append(ev.assurance_tier)
+                evidence_hashes_by_component.setdefault(cid, []).append(ev.content_hash)
 
         def leader_fn():
             findings = []
             for cid in scope:
                 urls = evidence_urls_by_component.get(cid, [])
+                hashes = evidence_hashes_by_component.get(cid, [])
                 candidate_ids = candidates_by_component.get(cid, [])
-                finding = _classify_component(cid, urls, candidate_ids, policy)
+                finding = _classify_component(cid, urls, candidate_ids, policy, hashes)
                 findings.append(finding)
             return findings
 
@@ -784,8 +956,9 @@ class HandoverProtocol(gl.Contract):
             my_findings = []
             for cid in scope:
                 urls = evidence_urls_by_component.get(cid, [])
+                hashes = evidence_hashes_by_component.get(cid, [])
                 candidate_ids = candidates_by_component.get(cid, [])
-                my_findings.append(_classify_component(cid, urls, candidate_ids, policy))
+                my_findings.append(_classify_component(cid, urls, candidate_ids, policy, hashes))
 
             leader_by_cid = {}
             for f in leader_findings:
@@ -1045,7 +1218,9 @@ class HandoverProtocol(gl.Contract):
         )
 
         def leader_fn():
-            return _classify_challenge(d.component_id, d.severity, d.status, d.origin_class, reason_code, source_url)
+            return _classify_challenge(
+                d.component_id, d.severity, d.status, d.origin_class, reason_code, source_url, content_hash
+            )
 
         def validator_fn(leaders_res):
             import genlayer.gl.vm as gl_vm
@@ -1053,7 +1228,9 @@ class HandoverProtocol(gl.Contract):
             if not isinstance(leaders_res, gl_vm.Return):
                 return False
             result = leaders_res.calldata
-            my_result = _classify_challenge(d.component_id, d.severity, d.status, d.origin_class, reason_code, source_url)
+            my_result = _classify_challenge(
+                d.component_id, d.severity, d.status, d.origin_class, reason_code, source_url, content_hash
+            )
             return (
                 isinstance(result, dict)
                 and set(result.keys()) == {"result"}
@@ -1114,10 +1291,12 @@ class HandoverProtocol(gl.Contract):
         self._require_defect_party(d)
         if d.status != "REPAIR_CLAIMED":
             raise Exception("no repair claim pending")
-        receipt_url = self.evidence[d.latest_receipt_id].source_url if d.latest_receipt_id else ""
+        receipt_evidence = self.evidence[d.latest_receipt_id] if d.latest_receipt_id else None
+        receipt_url = receipt_evidence.source_url if receipt_evidence else ""
+        receipt_hash = receipt_evidence.content_hash if receipt_evidence else ""
 
         def leader_fn():
-            return _classify_repair(d.component_id, d.severity, receipt_url)
+            return _classify_repair(d.component_id, d.severity, receipt_url, receipt_hash)
 
         def validator_fn(leaders_res):
             import genlayer.gl.vm as gl_vm
@@ -1125,7 +1304,7 @@ class HandoverProtocol(gl.Contract):
             if not isinstance(leaders_res, gl_vm.Return):
                 return False
             result = leaders_res.calldata
-            my_result = _classify_repair(d.component_id, d.severity, receipt_url)
+            my_result = _classify_repair(d.component_id, d.severity, receipt_url, receipt_hash)
             if not isinstance(result, dict) or result.get("repair_result") not in REPAIR_RESULTS:
                 return False
             return result.get("repair_result") == my_result.get("repair_result")
@@ -1334,7 +1513,20 @@ class HandoverProtocol(gl.Contract):
 # ---------------------------------------------------------------------------
 
 
-def _fetch_text(url: str) -> tuple:
+_STRICT_SHA256_HEX_LEN = 64
+
+
+def _is_strict_sha256_hex(s: str) -> bool:
+    if not isinstance(s, str) or len(s) != _STRICT_SHA256_HEX_LEN:
+        return False
+    try:
+        int(s, 16)
+    except ValueError:
+        return False
+    return s == s.lower()
+
+
+def _fetch_text(url: str, expected_content_hash: str = "") -> tuple:
     """Returns (ok, text). Never raises; failures are typed, not exceptions,
     so render/parse failure can never masquerade as a damage finding (HP14).
 
@@ -1345,7 +1537,16 @@ def _fetch_text(url: str) -> tuple:
     live on Studionet: a 404 response was correctly classified as
     UNAVAILABLE only because the model happened to recognize GitHub's 404
     HTML page; this check makes that outcome guaranteed rather than
-    incidental)."""
+    incidental).
+
+    If `expected_content_hash` is in strict lowercase 64-hex sha256-digest
+    form, the fetched raw bytes' sha256 digest is compared against it and
+    a mismatch is treated the same as a fetch failure (section: "bind
+    fetched bytes to a verified digest"). A content_hash NOT in that exact
+    form (e.g. the short placeholder values used throughout the Direct
+    Mode test fixtures, or any non-digest caller-chosen value) is left
+    unverified, same as before -- this is an opt-in check, not a
+    retroactive requirement on every piece of evidence ever submitted."""
     if not url:
         return False, ""
     try:
@@ -1354,13 +1555,21 @@ def _fetch_text(url: str) -> tuple:
         if status is not None and not (200 <= int(status) < 300):
             return False, ""
         body = resp.body or b""
+        if expected_content_hash and _is_strict_sha256_hex(expected_content_hash):
+            import hashlib
+
+            actual_hash = hashlib.sha256(body).hexdigest()
+            if actual_hash != expected_content_hash:
+                return False, ""
         text = body.decode("utf-8", errors="replace")
         return True, text[:MAX_SOURCE_TEXT_CHARS]
     except Exception:
         return False, ""
 
 
-def _classify_component(component_id: str, urls: list, candidate_defect_ids: list, policy: dict) -> dict:
+def _classify_component(
+    component_id: str, urls: list, candidate_defect_ids: list, policy: dict, content_hashes: list = None
+) -> dict:
     if not urls:
         return {
             "component_id": component_id,
@@ -1375,7 +1584,8 @@ def _classify_component(component_id: str, urls: list, candidate_defect_ids: lis
             "rationale_codes": [0],
         }
 
-    ok, text = _fetch_text(urls[0])
+    expected_hash = content_hashes[0] if content_hashes else ""
+    ok, text = _fetch_text(urls[0], expected_hash)
     if not ok:
         return {
             "component_id": component_id,
@@ -1566,6 +1776,7 @@ def _classify_challenge(
     origin_class: str,
     reason_code: str,
     evidence_url: str,
+    evidence_content_hash: str = "",
 ) -> dict:
     """Independently retrieves fresh challenge evidence and asks the model
     to re-evaluate the recorded finding against it (section 24). Without
@@ -1575,7 +1786,7 @@ def _classify_challenge(
     if reason_code not in CHALLENGE_REASONS:
         return {"result": "INCONCLUSIVE"}
 
-    ok, text = _fetch_text(evidence_url)
+    ok, text = _fetch_text(evidence_url, evidence_content_hash)
     if not ok:
         return {"result": "EXTERNAL_FAILURE"}
 
@@ -1631,11 +1842,11 @@ CHALLENGE EVIDENCE TEXT:
     return {"result": result}
 
 
-def _classify_repair(component_id: str, severity: str, receipt_url: str) -> dict:
+def _classify_repair(component_id: str, severity: str, receipt_url: str, receipt_content_hash: str = "") -> dict:
     if not receipt_url:
         return {"repair_result": "EXTERNAL_FAILURE"}
 
-    ok, text = _fetch_text(receipt_url)
+    ok, text = _fetch_text(receipt_url, receipt_content_hash)
     if not ok:
         return {"repair_result": "EXTERNAL_FAILURE"}
 

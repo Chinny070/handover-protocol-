@@ -145,8 +145,12 @@ web/LLM/consensus logic of their own: `docs/INTEGRATION.md`.
 
 - No economics (payments/escrow/deposits/slashing) in v1 by design.
 - No image/vision verification claimed as load-bearing (HP17).
-- `content_hash` is recorded but not cross-verified against live fetched
-  bytes in this release — see `docs/SECURITY.md`.
+- `content_hash` is cross-verified against fetched bytes only when
+  submitted in strict sha256-digest form; otherwise unverified by design
+  — see `docs/SECURITY.md`.
+- `trusted_inspectors` cryptographically verifies a signature, not a
+  real-world inspector's identity or credentials — that binding is the
+  policy owner's off-chain responsibility.
 
 ## Verification
 
@@ -156,13 +160,21 @@ lifecycle (baseline → custody → real consensus → condition delta → defec
 → repair → certificate, plus a genuine validator-disagreement case and a
 genuine negative/fail-closed case).
 
-**Direct Mode: 68/68 tests passing; integration: 4/4 real network reads
-against the canonical deployment (72/72 total).** See
+**Direct Mode: 74/74 tests passing; integration: 4/4 real network reads
+against the canonical deployment (78/78 total, plus one opt-in funded
+write-lifecycle test — see below).** See
 `docs/RELEASE_CANDIDATE_VERIFICATION.md` for the exact command, counts,
 versions, and an honest list of what is still *not* run (a standalone
 GenVM static lint pass beyond "schema loads against the live
-deployment"; `content_hash` is documented, not cryptographically
-verified — see `docs/DEPLOYMENT.md`).
+deployment"). `content_hash` is cryptographically verified when submitted
+in strict sha256-digest form, and `SIGNED_INSPECTION` evidence requires a
+real secp256k1 signature from a trusted inspector key — see
+`docs/DEPLOYMENT.md` and `docs/EVIDENCE.md`.
+
+`HANDOVER_RUN_FUNDED_LIFECYCLE=1 pytest tests/integration/test_handover_studionet_write_lifecycle.py -v`
+runs a complete, fully automated real write lifecycle against the
+canonical deployment (not part of the default test run, since it submits
+real transactions).
 
 ```bash
 py -3.12 -m venv .venv-test
@@ -176,6 +188,6 @@ pytest tests/direct/ -v
 1. Read `DECISION.md` (why this primitive, why GenLayer, differentiation).
 2. Read `docs/INVARIANTS.md` (18 invariants; grep test files for the `HP`
    tag referenced in each test's docstring/comment).
-3. Run `pytest tests/direct/ -v` (68 tests, no network/deployment needed).
+3. Run `pytest tests/direct/ -v` (74 tests, no network/deployment needed).
 4. Read `docs/CONSENSUS.md` and `tests/direct/test_handover_consensus.py`
    for the forged-leader proof.

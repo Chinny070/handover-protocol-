@@ -65,11 +65,11 @@ throughout `contracts/handover_protocol.py`:
 ## Direct Mode + integration: green
 
 ```text
-collected: 72
-passed: 72
+collected: 79
+passed: 78
 failed: 0
-skipped: 0
-duration: ~30-55s (full suite, includes 4 real Studionet network reads)
+skipped: 1 (funded write-lifecycle test, opt-in only -- see below)
+duration: ~30-55s (full default suite, includes 4 real Studionet network reads)
 Python: 3.12.10
 genlayer-test: 0.29.2
 genlayer-py: 0.16.3
@@ -78,13 +78,16 @@ command: pytest tests/ -v
 
 Breakdown by file:
 
-- `test_handover_protocol.py` — 11 passed (registration, component graph
+- `test_handover_protocol.py` — 13 passed (registration, component graph
   bounds/cycle rejection, seal/policy validation, baseline propose/accept/
   dispute/immutability, custody begin/overlap rejection, evaluate_return
   terminal states RETURN_CLEAR/DEFECTS_RECORDED/EVIDENCE_UNAVAILABLE
   (including a deterministic-by-HTTP-status-code case added after the
   live Studionet run surfaced the original implementation's gap — see
-  docs/DEPLOYMENT.md), certificate basics, close_handover gating).
+  docs/DEPLOYMENT.md), a content-hash-digest-mismatch case and a
+  content-hash-digest-match case (both using real computed sha256
+  digests, not placeholder values), certificate basics, close_handover
+  gating).
 - `test_handover_custody.py` — 5 passed (delegation scope-subset
   enforcement, delegation depth bound, custody-gap recording and
   certificate reflection, unknown gap-state rejection, custody-gap
@@ -108,11 +111,15 @@ Breakdown by file:
 - `test_handover_repairs.py` — 5 passed (repaired, not-repaired reopening,
   external-failure-is-not-repaired-or-failure, bounded repair rounds,
   re-submission gating).
-- `test_handover_evidence_assurance.py` — 4 passed (CRITICAL finding on
+- `test_handover_evidence_assurance.py` — 8 passed (CRITICAL finding on
   SELF_REPORTED evidence fails closed to INCONCLUSIVE, the same finding
-  on SIGNED_INSPECTION evidence is accepted, unknown assurance tier
-  rejected at submission, missing policy coverage for a severity fails
-  closed).
+  on SIGNED_INSPECTION evidence backed by a real inspector signature is
+  accepted, unknown assurance tier rejected at submission, missing policy
+  coverage for a severity fails closed, SIGNED_INSPECTION without a
+  signature is rejected at submission, a valid signature from an
+  untrusted key is rejected, a valid signature replayed onto different
+  evidence is rejected, a malformed trusted-inspector pubkey is rejected
+  at seal time).
 - `test_handover_authorization.py` — 12 passed (stranger/owner/custodian
   matrix for every write method found unauthorized during the external
   security review: primary-proposal owner check, delegation custodian
@@ -126,6 +133,14 @@ Breakdown by file:
   on asset A1 / handover H1's exact recorded live state, including that
   `get_custody_gap_history` still shows an earlier gap report that was
   later overwritten in the live field — see docs/DEPLOYMENT.md).
+- `tests/integration/test_handover_studionet_write_lifecycle.py` — 1
+  skipped by default (`HANDOVER_RUN_FUNDED_LIFECYCLE` not set). Run
+  explicitly with that env var set to `1`: drives a complete real write
+  lifecycle against the canonical deployment via subprocess calls to
+  `scripts/gl_write.js`, no manual CLI invocation, reusing the existing
+  keychain-signer retrieval (no new secret-handling surface). Passed
+  end-to-end on its third attempt (first two caught real bugs in the
+  test itself, not the contract — see docs/DEPLOYMENT.md).
 
 ## Pickling validation: green
 

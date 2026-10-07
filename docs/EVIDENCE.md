@@ -7,13 +7,17 @@ Each `Evidence` row binds: `evidence_id` (contract-assigned), `asset_id`,
 `source_url`, `content_hash`, `submitted_by`, `assurance_tier`, and
 `component_ids_json` (which components this evidence is relevant to).
 
-`content_hash` is caller-asserted and bounded in length only — this
-contract does not cryptographically verify it against fetched bytes
-(explicitly redesigned/labeled rather than presented as a proven content
-commitment; see the field's own docstring in `contracts/handover_protocol.py`
-and `docs/SECURITY.md` → Limitations). It exists as raw material for
-downstream tamper-evidence tooling, not as something this contract's own
-state transitions depend on.
+`content_hash` is caller-asserted and bounded in length. When submitted
+in strict 64-hex-lowercase sha256-digest form, `_fetch_text` verifies it
+against the actually-fetched bytes and treats a mismatch as a fetch
+failure (HP14) — proven live on Studionet: a correct digest let a real
+fetch succeed, and a deliberately wrong digest produced a deterministic
+`EVIDENCE_UNAVAILABLE` (see `docs/DEPLOYMENT.md`). A `content_hash` in
+any other form (the short placeholder values used throughout the Direct
+Mode test fixtures) remains unverified by design — this is an opt-in
+check by format, not a retroactive requirement on every piece of evidence
+ever submitted. See the field's own docstring in
+`contracts/handover_protocol.py` and `docs/SECURITY.md` → Limitations.
 
 ## Supported evidence kinds
 
@@ -34,9 +38,24 @@ plausibly carry it (`_tier_allowed_for_kind`): `SIGNED_INSPECTION`
 requires `evidence_kind=SIGNED_INSPECTION_RECORD`, `HASH_COMMITMENT_ONLY`
 requires `evidence_kind=HASH_COMMITMENT`, the "public source" tiers
 require a plausibly-public kind, and `SELF_REPORTED`/`UNVERIFIED` are
-always claimable as the weakest fallback. This does not cryptographically
-prove the claim, but it closes the trivial hole where any caller labels a
-plain web page as a signed inspection.
+always claimable as the weakest fallback.
+
+For `SIGNED_INSPECTION` specifically, the kind/tier check is not the only
+gate: `add_baseline_evidence`/`submit_return_evidence` take optional
+`inspector_pubkey`/`sig_r`/`sig_s` parameters, and `_verify_inspector_signature`
+requires a valid secp256k1 ECDSA signature from a public key in the
+asset's frozen policy's `trusted_inspectors` list, over the exact
+`evidence_kind|source_url|content_hash` triple being submitted (so a
+signature cannot be replayed onto different evidence). This is pure
+deterministic verification — the model is never involved, consistent
+with the GenLayer boundary — implemented from scratch in plain Python
+since no crypto library exists in the GenVM runtime. It cryptographically
+proves the claimed signer produced that exact signature; it cannot (and
+does not claim to) prove that public key belongs to a real, licensed
+inspector — binding a key to a real-world identity is the policy owner's
+responsibility when populating `trusted_inspectors`. An asset whose
+policy never sets `trusted_inspectors` can never have evidence clear
+`SIGNED_INSPECTION` — there is no default "everyone is trusted" state.
 
 The frozen policy's `evidence_minimums` maps a severity bucket
 (`minor`/`major`/`critical`) to the tiers that may support a finding of

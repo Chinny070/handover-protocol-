@@ -120,11 +120,14 @@ satisfy the policy (found and fixed during post-build review).
 or another strong tier for a plain `WEB_RENDERED_INSPECTION`/arbitrary
 evidence_kind is rejected at submission (`_tier_allowed_for_kind`): the
 stronger tiers can only be claimed for an `evidence_kind` that could
-plausibly carry that property (e.g. `SIGNED_INSPECTION` only for
-`evidence_kind=SIGNED_INSPECTION_RECORD`). This does not cryptographically
-prove the claim — nothing on-chain can — but it closes the trivial hole
-where any caller labels anything with the strongest available tier
-regardless of what it actually is.
+plausibly carry that property. For `SIGNED_INSPECTION` specifically, this
+is no longer just a kind/tier label check: `_verify_inspector_signature`
+additionally requires a valid secp256k1 signature from a public key the
+asset's frozen policy actually trusts, over the exact evidence triple
+being submitted. This cryptographically proves the claimed signer
+produced that exact signature; it does not (and cannot, on-chain) prove
+that public key belongs to a real, qualified inspector — that binding is
+the policy owner's responsibility when populating `trusted_inspectors`.
 
 **Visual overclaim.** This release makes no image/vision verification
 claim (HP17); see `docs/EVIDENCE.md`.
@@ -140,40 +143,61 @@ matrix.
 
 ## Limitations
 
-- `content_hash` is recorded but not cross-verified against live fetched
-  bytes in this release.
+- `content_hash` is cross-verified against live fetched bytes only when
+  submitted in strict 64-hex-lowercase sha256-digest form (see "Follow-up
+  hardening" below); a `content_hash` in any other form remains
+  caller-asserted and unverified, by design, not oversight.
 - No economic/slashing layer exists in v1 by design (section 25).
+- `trusted_inspectors` establishes which public keys are cryptographically
+  recognized; it does not bind a key to a real-world identity or
+  credential — that remains an off-chain, policy-owner responsibility.
 
-## Acknowledged future hardening (deferred, not silently skipped)
+## Follow-up hardening (originally deferred, now implemented)
 
-Raised during the external security review, explicitly scoped by the
-reviewer as later/optional/eventual work rather than a blocking gap in
-this release:
+Raised during the external security review, originally scoped as
+later/optional/eventual work; all three are now implemented, tested, and
+proven live (see `docs/DEPLOYMENT.md` for exact transaction hashes):
 
 - **Verify signatures/attestations for high-assurance evidence.**
-  `_tier_allowed_for_kind` closes the trivial self-certification hole
-  (an `evidence_kind` must plausibly carry the claimed tier), but nothing
-  on-chain today cryptographically verifies a `SIGNED_INSPECTION_RECORD`
-  actually carries a valid signature from a recognized inspector. A later
-  version could accept a signature/public-key alongside the evidence and
-  have the model (or deterministic code, if the signature scheme allows)
-  verify it before the tier is honored.
-- **Bind fetched bytes to a verified digest.** `content_hash` remains
-  caller-asserted only (see above and `docs/EVIDENCE.md`). A later
-  version could have `_fetch_text` compute and compare a digest of the
-  actually-retrieved bytes against the submitted `content_hash`,
-  deterministically failing closed on mismatch — deferred this release
-  because it would require every Direct Mode evidence fixture across
-  ~40 call sites to carry a real digest matching its mocked body, for
-  marginal additional assurance over the kind/tier and scope checks
-  already in place.
-- **Automate a funded write lifecycle on Studionet.** The live lifecycle
-  proofs in `docs/DEPLOYMENT.md` were driven by hand
-  (`scripts/gl_write.js` + `genlayer` CLI). `tests/integration/test_handover_studionet.py`
-  covers real, reproducible *read* checks against the canonical
-  deployment without needing a secret. A fully automated *write*
-  lifecycle test would need a funded signer managed safely (e.g. a
-  CI-scoped keystore with a minimal balance) — worth doing if the
-  tooling/environment running the test suite makes that practical, not
-  attempted here to avoid introducing a secret-handling surface for a
-  test suite that otherwise needs none.
+  `_tier_allowed_for_kind` already closed the trivial self-certification
+  hole (an `evidence_kind` must plausibly carry the claimed tier).
+  `_verify_inspector_signature` now additionally requires a valid
+  secp256k1 ECDSA signature from a public key in the asset's frozen
+  policy's `trusted_inspectors` list, over the exact
+  `evidence_kind|source_url|content_hash` triple, before `SIGNED_INSPECTION`
+  is honored. Implemented as pure-Python ECDSA (no crypto library exists
+  in the current GenVM runtime — confirmed by inspecting the extracted
+  `genvm-universal` package before writing a single line of curve math)
+  and cross-verified against an independently-generated signature from
+  the `eth_keys` library before trusting it; a hand-typed curve constant
+  was initially wrong by one hex digit and was caught this way, not by
+  assuming it was correct. Tests: `tests/direct/test_handover_evidence_assurance.py`
+  (valid signature accepted, missing/untrusted/replayed signature
+  rejected, malformed policy pubkey rejected at seal time). The model is
+  never involved in this check — it is pure deterministic verification,
+  consistent with the GenLayer boundary (signatures are not a semantic
+  judgment).
+- **Bind fetched bytes to a verified digest.** `_fetch_text` now compares
+  a sha256 of the actually-fetched bytes against `content_hash` whenever
+  it is submitted in strict 64-hex-lowercase sha256-digest form, treating
+  a mismatch the same as a fetch failure (HP14). This is opt-in by
+  format rather than retroactive on every evidence item ever submitted —
+  the ~40 Direct Mode fixtures using short placeholder hashes (`"h"`,
+  `"h1"`, etc.) are unaffected and remain unverified, since none of them
+  were testing this feature; two new tests use real computed digests
+  (`test_content_hash_mismatch_fails_closed_to_unavailable`,
+  `test_content_hash_match_is_verified_and_evidence_accepted` in
+  `tests/direct/test_handover_protocol.py`).
+- **Automate a funded write lifecycle on Studionet.**
+  `tests/integration/test_handover_studionet_write_lifecycle.py` drives a
+  complete real write lifecycle (register → component → seal → propose →
+  accept → begin custody → return evidence → evaluate_return → real
+  read-back) fully automated via subprocess calls to `scripts/gl_write.js`,
+  reusing its existing keychain-signer retrieval (no new secret-handling
+  surface). Gated behind `HANDOVER_RUN_FUNDED_LIFECYCLE=1` since every run
+  submits real, non-idempotent transactions — not part of the default
+  `pytest tests/` run. Ran end-to-end successfully; caught and fixed two
+  real bugs along the way (a receipt-parsing bug in the test itself, and
+  the test calling `submit_return_evidence` with the wrong signer — the
+  owner instead of the current custodian, exactly the authorization rule
+  built earlier in this same review cycle).

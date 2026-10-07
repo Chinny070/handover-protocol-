@@ -14,7 +14,7 @@ vote tallies, consensus results) this canonical deployment was built from.
 import genlayer_py
 import pytest
 
-CANONICAL_ADDRESS = "0xc877275d6B3Ad199f2a9eae97EE9eF25A0783807"
+CANONICAL_ADDRESS = "0x54953F416c4Dc8B80559bb877870Cf636431c658"
 
 
 @pytest.fixture(scope="module")
@@ -30,15 +30,16 @@ def studionet_client():
 
 
 def test_canonical_asset_a1_matches_recorded_live_state(studionet_client):
-    """Asset A1 was registered and sealed, and handover H1 was proposed
-    against it, as part of this session's custody-gap-history smoke test
-    (docs/DEPLOYMENT.md). Its recorded state is immutable on-chain history
-    and must still read back exactly as documented."""
+    """Asset A1 was registered and sealed with a trusted_inspectors policy
+    entry, and handover H1 was proposed against it, as part of this
+    session's signature-verification smoke test (docs/DEPLOYMENT.md). Its
+    recorded state is immutable on-chain history and must still read back
+    exactly as documented."""
     asset = studionet_client.read_contract(
         address=CANONICAL_ADDRESS, function_name="get_asset", args=["A1"]
     )
     assert asset["asset_id"] == "A1"
-    assert asset["name"] == "Gap History Smoke Test Asset"
+    assert asset["name"] == "Signature Proof Asset"
     assert asset["status"] == "SEALED"
     assert asset["component_ids"] == ["C1"]
     assert asset["owner"].lower() == "0xaffe15eec45b68835cc9e5b4ab85dd5deae8e70b"
@@ -50,7 +51,7 @@ def test_canonical_handover_h1_matches_recorded_live_state(studionet_client):
     )
     assert handover["handover_id"] == "H1"
     assert handover["asset_id"] == "A1"
-    assert handover["status"] == "BASELINE_PROPOSED"
+    assert handover["status"] == "RETURN_PENDING"
     assert handover["scope"] == ["C1"]
     assert handover["to_party"].lower() == "0x10b091a7b19d3f0da511a06985a8636fa58a0377"
     # The live field reflects only the latest mark_custody_gap call...

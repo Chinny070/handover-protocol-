@@ -1,3 +1,8 @@
 genlayer-test==0.29.2
 genlayer-py==0.16.3
 pytest>=8,<10
+# Test-only: signs fixture evidence for SIGNED_INSPECTION tests. The
+# deployed contract never signs anything -- it only verifies, using a
+# from-scratch pure-Python secp256k1 implementation (no crypto library
+# exists in the GenVM runtime). See docs/SECURITY.md.
+eth-keys==0.8.0
