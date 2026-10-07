@@ -1,0 +1,14 @@
+HANDOVER PROTOCOL — PUBLIC FIXTURE (NOT A REAL-WORLD INSPECTION RECORD)
+
+This file is a controlled, reproducible evidence fixture used for the
+Handover Protocol live Studionet proof. See docs/DEPLOYMENT.md. Retrieved
+by GenLayer validators via gl.nondet.web.get. Not a real inspection or a
+real repair shop receipt.
+
+Component: front_bumper
+Repair receipt.
+
+Repair shop report: the cracked front bumper section was replaced with a
+new bumper panel and repainted to match the vehicle's original color. The
+crack described in the return inspection is fully resolved; no residual
+damage remains on the component.

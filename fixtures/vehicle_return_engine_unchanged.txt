@@ -1,0 +1,12 @@
+HANDOVER PROTOCOL — PUBLIC FIXTURE (NOT A REAL-WORLD INSPECTION RECORD)
+
+This file is a controlled, reproducible evidence fixture used for the
+Handover Protocol live Studionet proof. See docs/DEPLOYMENT.md. Retrieved
+by GenLayer validators via gl.nondet.web.get. Not a real inspection.
+
+Component: engine
+Return inspection, end of custody interval.
+
+The engine still runs smoothly with no unusual noise, no warning lights,
+and no visible fluid leaks. Condition is unchanged from the baseline
+inspection.

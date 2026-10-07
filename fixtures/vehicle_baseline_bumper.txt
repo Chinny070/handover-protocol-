@@ -1,0 +1,13 @@
+HANDOVER PROTOCOL — PUBLIC FIXTURE (NOT A REAL-WORLD INSPECTION RECORD)
+
+This file is a controlled, reproducible evidence fixture used for the
+Handover Protocol live Studionet proof (see docs/DEPLOYMENT.md and
+section 31 of HANDOVER_PROTOCOL_CODEX_MASTER_PROMPT.md). It is retrieved
+by GenLayer validators via gl.nondet.web.get over its raw.githubusercontent.com
+URL. It does not represent an actual vehicle or a real inspection.
+
+Component: front_bumper
+Baseline inspection, pre-handover.
+
+The front bumper is in good condition. No scratches, no dents, no cracks.
+Paint is uniform with no chips. No pre-existing defects recorded.

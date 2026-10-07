@@ -1,0 +1,13 @@
+HANDOVER PROTOCOL — PUBLIC FIXTURE (NOT A REAL-WORLD INSPECTION RECORD)
+
+This file is a controlled, reproducible evidence fixture used for the
+Handover Protocol live Studionet proof. See docs/DEPLOYMENT.md. Retrieved
+by GenLayer validators via gl.nondet.web.get. Not a real inspection.
+
+Component: front_bumper
+Return inspection, end of custody interval.
+
+The front bumper now has a large visible crack running across its lower
+left section, roughly 20cm long, with the paint cracked and separated
+along the damage. This was not present at baseline. The damage appears
+consistent with a moderate impact, not ordinary cosmetic wear.
