@@ -48,8 +48,9 @@ Both checks are proven directly in `tests/direct/test_handover_custody.py`
 ## Custody gaps (HP3)
 
 `mark_custody_gap(handover_id, gap_state)` deterministically records one
-of `NO_GAP | PARTIAL_GAP | CUSTODY_GAP | UNKNOWN` on the handover. There is
-no code path that infers or defaults a gap classification onto the
+of `NO_GAP | PARTIAL_GAP | CUSTODY_GAP | UNKNOWN` on the handover,
+restricted to a party to that handover (`_require_handover_party`). There
+is no code path that infers or defaults a gap classification onto the
 "nearest known holder" — the gap is either explicitly recorded or it
 remains `NO_GAP`. A recorded gap propagates into
 `get_condition_certificate` as `custody_gap_present` and
@@ -59,6 +60,19 @@ output can independently be `CUSTODY_GAP` for a specific finding, and the
 validator's forged-leader test proves a leader cannot claim
 `SUPPORTED_AS_NEW_IN_INTERVAL` attribution when the honest classification
 is `CUSTODY_GAP` (`docs/CONSENSUS.md`).
+
+Every `mark_custody_gap` call is append-only: it is recorded in
+`custody_gap_history_json` (bounded `MAX_CUSTODY_GAP_EVENTS`), exposed via
+`get_custody_gap_history(handover_id)`, alongside the `previous_gap_state`
+it replaced and who called it. `handover.custody_gap` (what the
+certificate reads) still reflects only the latest call, but a party
+cannot silently erase an earlier gap report by later overwriting it with
+`NO_GAP` — the original report stays visible in history
+(`test_custody_gap_history_is_append_only_and_not_erasable`). This is
+deliberately lighter than a full challenge subsystem for gap reports:
+either party to the handover may still record a new gap_state at any
+time (symmetric, matching who may call it before); what changed is that
+doing so no longer destroys the record of what was previously reported.
 
 ## Responsibility propagation
 

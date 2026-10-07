@@ -84,9 +84,9 @@ evaluate_return, challenge_finding(defect_id, reason_code, evidence_kind,
 source_url, content_hash), submit_repair, verify_repair, close_handover,
 cancel_handover`.
 
-Views: `get_asset, get_component, get_handover, get_active_custodian,
-get_custody_chain, get_defect, get_defect_history, get_open_defect_count,
-get_condition_certificate, is_handover_clear`.
+Views: `get_asset, get_component, get_handover, get_custody_gap_history,
+get_active_custodian, get_custody_chain, get_defect, get_defect_history,
+get_open_defect_count, get_condition_certificate, is_handover_clear`.
 
 ## Nondeterministic operations
 
@@ -156,8 +156,8 @@ lifecycle (baseline → custody → real consensus → condition delta → defec
 → repair → certificate, plus a genuine validator-disagreement case and a
 genuine negative/fail-closed case).
 
-**Direct Mode: 67/67 tests passing; integration: 3/3 real network reads
-against the canonical deployment (70/70 total).** See
+**Direct Mode: 68/68 tests passing; integration: 4/4 real network reads
+against the canonical deployment (72/72 total).** See
 `docs/RELEASE_CANDIDATE_VERIFICATION.md` for the exact command, counts,
 versions, and an honest list of what is still *not* run (a standalone
 GenVM static lint pass beyond "schema loads against the live
@@ -176,6 +176,6 @@ pytest tests/direct/ -v
 1. Read `DECISION.md` (why this primitive, why GenLayer, differentiation).
 2. Read `docs/INVARIANTS.md` (18 invariants; grep test files for the `HP`
    tag referenced in each test's docstring/comment).
-3. Run `pytest tests/direct/ -v` (67 tests, no network/deployment needed).
+3. Run `pytest tests/direct/ -v` (68 tests, no network/deployment needed).
 4. Read `docs/CONSENSUS.md` and `tests/direct/test_handover_consensus.py`
    for the forged-leader proof.

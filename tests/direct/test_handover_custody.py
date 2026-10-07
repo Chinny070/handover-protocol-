@@ -113,3 +113,32 @@ def test_unknown_gap_state_rejected(direct_vm):
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     with direct_vm.expect_revert("unknown gap state"):
         c.mark_custody_gap(handover_id=hid, gap_state="SOMETHING_ELSE")
+
+
+def test_custody_gap_history_is_append_only_and_not_erasable(direct_vm):
+    """A party cannot silently erase an earlier gap report by later
+    overwriting handover.custody_gap with NO_GAP -- the original report
+    must remain visible in get_custody_gap_history even though the
+    current/latest custody_gap field reflects the newest call."""
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    cid = comps["bumper"]
+    renter = renter_address("renter")
+    hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
+
+    c.mark_custody_gap(handover_id=hid, gap_state="CUSTODY_GAP")
+    direct_vm.sender = renter
+    c.mark_custody_gap(handover_id=hid, gap_state="NO_GAP")
+
+    h = c.get_handover(handover_id=hid)
+    assert h["custody_gap"] == "NO_GAP"  # latest call wins for the live field
+
+    history = c.get_custody_gap_history(handover_id=hid)
+    assert len(history) == 2
+    assert history[0]["gap_state"] == "CUSTODY_GAP"
+    assert history[0]["previous_gap_state"] == "NO_GAP"
+    assert history[1]["gap_state"] == "NO_GAP"
+    assert history[1]["previous_gap_state"] == "CUSTODY_GAP"
+    assert history[1]["set_by"].lower() == renter.as_hex.lower()
+    # The original CUSTODY_GAP report is still visible despite being
+    # "overwritten" in the live field -- nothing was erased.

@@ -65,11 +65,11 @@ throughout `contracts/handover_protocol.py`:
 ## Direct Mode + integration: green
 
 ```text
-collected: 70
-passed: 70
+collected: 72
+passed: 72
 failed: 0
 skipped: 0
-duration: ~30-50s (full suite, includes 3 real Studionet network reads)
+duration: ~30-55s (full suite, includes 4 real Studionet network reads)
 Python: 3.12.10
 genlayer-test: 0.29.2
 genlayer-py: 0.16.3
@@ -85,9 +85,10 @@ Breakdown by file:
   (including a deterministic-by-HTTP-status-code case added after the
   live Studionet run surfaced the original implementation's gap — see
   docs/DEPLOYMENT.md), certificate basics, close_handover gating).
-- `test_handover_custody.py` — 4 passed (delegation scope-subset
+- `test_handover_custody.py` — 5 passed (delegation scope-subset
   enforcement, delegation depth bound, custody-gap recording and
-  certificate reflection, unknown gap-state rejection).
+  certificate reflection, unknown gap-state rejection, custody-gap
+  history append-only and not erasable by a later overwrite).
 - `test_handover_defects.py` — 7 passed (contract-assigned sequential
   defect IDs, worsening with append-only history, invented-matched-id
   fail-closed, bounded challenge rounds, unknown challenge-reason
@@ -119,11 +120,12 @@ Breakdown by file:
   mark_custody_gap/evaluate_return/close_handover party checks,
   challenge/repair/verify_repair defect-party checks, and
   previously-untested cancel_handover coverage).
-- `tests/integration/test_handover_studionet.py` — 3 passed (real
+- `tests/integration/test_handover_studionet.py` — 4 passed (real
   `genlayer_py.read_contract` calls against the canonical Studionet
   deployment, using a freshly generated never-signing keypair; asserts
-  on asset A1 / handover H1's exact recorded live state — see
-  docs/DEPLOYMENT.md).
+  on asset A1 / handover H1's exact recorded live state, including that
+  `get_custody_gap_history` still shows an earlier gap report that was
+  later overwritten in the live field — see docs/DEPLOYMENT.md).
 
 ## Pickling validation: green
 

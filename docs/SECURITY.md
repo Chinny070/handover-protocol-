@@ -143,3 +143,37 @@ matrix.
 - `content_hash` is recorded but not cross-verified against live fetched
   bytes in this release.
 - No economic/slashing layer exists in v1 by design (section 25).
+
+## Acknowledged future hardening (deferred, not silently skipped)
+
+Raised during the external security review, explicitly scoped by the
+reviewer as later/optional/eventual work rather than a blocking gap in
+this release:
+
+- **Verify signatures/attestations for high-assurance evidence.**
+  `_tier_allowed_for_kind` closes the trivial self-certification hole
+  (an `evidence_kind` must plausibly carry the claimed tier), but nothing
+  on-chain today cryptographically verifies a `SIGNED_INSPECTION_RECORD`
+  actually carries a valid signature from a recognized inspector. A later
+  version could accept a signature/public-key alongside the evidence and
+  have the model (or deterministic code, if the signature scheme allows)
+  verify it before the tier is honored.
+- **Bind fetched bytes to a verified digest.** `content_hash` remains
+  caller-asserted only (see above and `docs/EVIDENCE.md`). A later
+  version could have `_fetch_text` compute and compare a digest of the
+  actually-retrieved bytes against the submitted `content_hash`,
+  deterministically failing closed on mismatch — deferred this release
+  because it would require every Direct Mode evidence fixture across
+  ~40 call sites to carry a real digest matching its mocked body, for
+  marginal additional assurance over the kind/tier and scope checks
+  already in place.
+- **Automate a funded write lifecycle on Studionet.** The live lifecycle
+  proofs in `docs/DEPLOYMENT.md` were driven by hand
+  (`scripts/gl_write.js` + `genlayer` CLI). `tests/integration/test_handover_studionet.py`
+  covers real, reproducible *read* checks against the canonical
+  deployment without needing a secret. A fully automated *write*
+  lifecycle test would need a funded signer managed safely (e.g. a
+  CI-scoped keystore with a minimal balance) — worth doing if the
+  tooling/environment running the test suite makes that practical, not
+  attempted here to avoid introducing a secret-handling surface for a
+  test suite that otherwise needs none.

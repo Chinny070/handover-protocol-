@@ -27,14 +27,15 @@ condition certificates for downstream contracts.
   the Portable Condition Certificate.
 - 18 named invariants (`docs/INVARIANTS.md`), each covered by at least one
   Direct Mode test.
-- **67/67 Direct Mode tests + 3/3 real-network integration tests passing**
+- **68/68 Direct Mode tests + 4/4 real-network integration tests passing**
   (`docs/RELEASE_CANDIDATE_VERIFICATION.md`), including 8 forged-leader
-  rejection cases, 15 adversarial output-hardening cases, and 12
-  stranger/owner/custodian authorization cases.
+  rejection cases, 15 adversarial output-hardening cases, 12
+  stranger/owner/custodian authorization cases, and a custody-gap
+  append-only-history case.
 - A substantive custom validator (`gl.vm.run_nondet_unsafe`), not
   `strict_eq` over raw prose (`docs/CONSENSUS.md`).
 - **Deployed and live-verified on Studionet** (`docs/DEPLOYMENT.md`):
-  canonical address `0x4b4D04B5268cC7e20ea6970947Cf2f9b29B0aB92`, real
+  canonical address `0xc877275d6B3Ad199f2a9eae97EE9eF25A0783807`, real
   leader/validator consensus over public fixture evidence, a genuine
   condition-delta + defect + repair + challenge-OVERTURNED cycle, a
   genuine case of cross-model validator disagreement (`UNDETERMINED`,

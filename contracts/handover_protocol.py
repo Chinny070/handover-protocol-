@@ -27,6 +27,7 @@ MAX_DELEGATION_DEPTH = 4
 MAX_CHALLENGE_ROUNDS = 3
 MAX_REPAIR_ROUNDS = 5
 MAX_DEFECT_HISTORY_EVENTS = 64
+MAX_CUSTODY_GAP_EVENTS = 32
 MAX_SOURCE_TEXT_CHARS = 20_000
 MAX_REASON_CHARS = 500
 MAX_NAME_CHARS = 128
@@ -256,7 +257,8 @@ class Handover:
     acceptance_status: str  # "PENDING" | "ACCEPTED" | "DISPUTED"
     start_time: str
     end_time: str
-    custody_gap: str  # one of GAP_STATES
+    custody_gap: str  # current/latest gap state, one of GAP_STATES
+    custody_gap_history_json: str  # JSON list[dict], append-only, bounded MAX_CUSTODY_GAP_EVENTS
     checkpoint_id: str
 
 
@@ -518,6 +520,7 @@ class HandoverProtocol(gl.Contract):
             start_time="",
             end_time="",
             custody_gap="NO_GAP",
+            custody_gap_history_json="[]",
             checkpoint_id="",
         )
 
@@ -701,11 +704,29 @@ class HandoverProtocol(gl.Contract):
     @gl.public.write
     def mark_custody_gap(self, handover_id: str, gap_state: str) -> None:
         """Deterministic recording of a detected custody/evidence discontinuity.
-        Never silently assigns an attribution (HP3)."""
+        Never silently assigns an attribution (HP3). Append-only: every
+        call is recorded in custody_gap_history_json, including one that
+        changes the current state to a less severe one -- a party cannot
+        silently erase an earlier gap report by overwriting it with
+        NO_GAP later; the original report stays visible in history even
+        though handover.custody_gap (the field the certificate reads)
+        reflects the latest call, same as before."""
         if gap_state not in GAP_STATES:
             raise Exception("unknown gap state")
         handover = self._get_handover(handover_id)
         self._require_handover_party(handover)
+
+        history = self._json_list(handover.custody_gap_history_json)
+        if len(history) >= MAX_CUSTODY_GAP_EVENTS:
+            raise Exception("custody gap history bound exceeded (HP15)")
+        history.append(
+            {
+                "gap_state": gap_state,
+                "previous_gap_state": handover.custody_gap,
+                "set_by": gl.message.sender_address.as_hex,
+            }
+        )
+        handover.custody_gap_history_json = json.dumps(history)
         handover.custody_gap = gap_state
 
     # ------------------------------------------------------------------
@@ -1190,6 +1211,15 @@ class HandoverProtocol(gl.Contract):
             "custody_gap": h.custody_gap,
             "checkpoint_id": h.checkpoint_id,
         }
+
+    @gl.public.view
+    def get_custody_gap_history(self, handover_id: str) -> list:
+        """Full append-only history of mark_custody_gap calls for this
+        handover (HP3): each entry records the gap_state set, the
+        previous gap_state it replaced, and who set it. A party cannot
+        silently erase an earlier gap report -- it stays here even after
+        a later call changes handover.custody_gap to something else."""
+        return self._json_list(self.handovers[handover_id].custody_gap_history_json)
 
     @gl.public.view
     def get_active_custodian(self, asset_id: str) -> str:
