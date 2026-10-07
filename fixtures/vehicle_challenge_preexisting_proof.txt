@@ -1,0 +1,17 @@
+HANDOVER PROTOCOL — PUBLIC FIXTURE (NOT A REAL-WORLD INSPECTION RECORD)
+
+This file is a controlled, reproducible evidence fixture used for the
+Handover Protocol live Studionet proof of the real challenge-evaluation
+path (`challenge_finding` / `_classify_challenge`). See
+docs/DEPLOYMENT.md. Retrieved by GenLayer validators via
+gl.nondet.web.get. Not a real inspection or a real pre-handover record.
+
+Component: front_bumper
+Challenge evidence: pre-handover baseline photo, timestamped before
+custody began.
+
+This signed inspection record, dated before the custody interval started,
+clearly shows the exact same large crack across the lower-left section of
+the front bumper that was later reported as new damage at return. The
+crack was already present at baseline. It is not new damage from this
+custody interval.
