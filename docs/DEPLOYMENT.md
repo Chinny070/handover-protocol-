@@ -55,7 +55,7 @@ disagreement, documented below)
 | Repair claim | `submit_repair(D1, REPAIR_RECEIPT, ...)` → `fixtures/vehicle_repair_receipt_bumper.txt` | `REPAIR_CLAIMED` |
 | **Verify repair (real consensus)** | `verify_repair(D1)` | `REPAIRED` |
 | Certificate again | `get_condition_certificate(A3)` | `major_defect_count: 0`, `open_defect_count: 0` |
-| Challenge | `challenge_finding(D1, WRONG_SEVERITY)` | `UPHELD` (see Limitations — `_classify_challenge` is a placeholder) |
+| Challenge | `challenge_finding(D1, WRONG_SEVERITY)` | `UPHELD` — at the time of this run `_classify_challenge` was still the old placeholder; see "Real challenge re-evaluation" below for the later live proof against the real implementation on the current canonical deployment |
 | Close | `close_handover(H2)` | `CLOSED` |
 | Clear check | `is_handover_clear(A3)` | `true` |
 

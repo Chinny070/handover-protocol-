@@ -86,3 +86,104 @@ No payments, escrow, deposits, insurance pools, slashing, or challenge
 bonds are implemented. The primitive's value is condition + custody +
 attribution + defect lineage + repair. Downstream contracts can layer
 their own economics on top of the certificate this contract exposes.
+
+## Reviewer rejection audit (master spec section 35)
+
+Tried to reject the repo with each listed objection; recorded the actual
+answer rather than an assertion.
+
+**"This is just a rental app."** No rental-specific concept (no booking,
+pricing, or marketplace logic) exists anywhere in the contract. The three
+sketched consumers in `docs/INTEGRATION.md` are a deposit-refund
+contract, an insurance-eligibility gate, and a resale-trust-score
+contract — none of which is a rental app, and the core contract is
+identical for all three.
+
+**"This is just AI comparing photos."** No image/vision input exists in
+this release (HP17); evidence is text (rendered pages, structured
+checklists, receipts). The model never just "compares" — it classifies
+into a closed typed vocabulary, matches against contract-held candidate
+defect IDs it cannot invent, and is independently re-derived and cross-
+checked by a validator, not accepted as a single call's opinion.
+
+**"This is generic dispute resolution."** A generic dispute resolver has
+no baseline-acceptance handshake, no contract-assigned defect identity
+with an append-only lifecycle, no custody-interval graph with bounded
+delegation, and no frozen normal-wear policy. Handover Protocol has all
+four; see `DECISION.md` → differentiation vs. Reality Checkpoint
+Protocol above.
+
+**"The model decides liability."** The model never outputs money,
+ownership, or a liability verdict (HP5; `_normalize_component_finding`
+rejects any response containing fields outside the typed schema). It
+outputs `attribution_class` — a fact about which custody interval's
+evidence first supports a finding. Mapping that fact to contractual
+responsibility is left as an explicit downstream/policy-layer integration
+point (see "Responsibility propagation" in `docs/CUSTODY.md`), per
+section 13 of the master spec.
+
+**"First observed is falsely treated as caused by."** The attribution
+vocabulary never includes a causation word; `FIRST_OBSERVED_IN_INTERVAL`
+and `SUPPORTED_AS_NEW_IN_INTERVAL` are the strongest claims made, and
+`test_evaluate_return_new_damage_creates_defect` asserts the literal
+string `"caused"` never appears in a stored defect event (HP9).
+
+**"Private evidence makes consensus fake."** Every piece of evidence used
+in this submission's live Studionet proof is a public
+`raw.githubusercontent.com` URL, independently fetched by leader and
+validator (confirmed live: a genuine cross-model validator disagreement
+occurred on a two-component case — not possible if validators were
+trusting the leader's content instead of fetching it themselves). See
+`docs/DEPLOYMENT.md`.
+
+**"Visual verification is claimed without runtime support."** Not
+claimed anywhere (HP17; `docs/EVIDENCE.md` → "Physical-World
+Limitations").
+
+**"The validator only checks JSON."** The validator independently
+re-fetches evidence and independently re-runs the same classification
+prompt, then compares the resulting typed fields — including
+`matched_defect_id`, a decision-critical field not in `CRITICAL_FIELDS`
+that a forged leader could otherwise exploit (found and fixed during
+review, see `tests/direct/test_handover_consensus.py`).
+
+**"A broken URL becomes damage."** `_fetch_text` checks HTTP status
+deterministically (fixed after the live run first exposed the gap — see
+`docs/DEPLOYMENT.md`); a 404/5xx never reaches the model as if it were
+successful evidence. Proven live: a genuine 404 → `EVIDENCE_UNAVAILABLE`.
+
+**"Normal wear is whatever the model feels like."** Section 4 of the
+master spec explicitly assigns "whether change is normal wear under a
+frozen policy" to GenLayer/validators, not to deterministic arithmetic —
+this is a designed boundary, not a gap. The frozen policy's wear budget
+is given to the model as fixed context it cannot alter, and the
+classification is cross-validated by an independent validator, not
+accepted from a single call.
+
+**"The validator always rejects / only rejects."** Disproven directly:
+`test_honest_leader_result_is_accepted` proves an honest, matching leader
+result is accepted; the live Studionet proof recorded multiple genuinely
+successful consensus rounds (`DEFECTS_RECORDED`, `REPAIRED`,
+`OVERTURNED`) alongside the genuine `UNDETERMINED` disagreement.
+
+**"Defects can be rewritten."** `_append_defect_event` only appends
+(HP8); `test_worsened_defect_links_to_predecessor_history` and the live
+`get_defect_history(D1)` both show the original `OPEN` event preserved
+after a later `UNRESOLVED` event is appended.
+
+**"The custody chain is decorative."** `begin_custody` rejects an
+overlapping primary custody interval for the same scope (HP2);
+`propose_handover`'s delegation path rejects a child scope exceeding its
+parent's and a depth beyond `MAX_DELEGATION_DEPTH` (HP11) — both tested
+and both real rejections, not advisory warnings.
+
+**"The repo overclaims physical/legal causation."** See "First observed"
+above; additionally `docs/EVIDENCE.md` → "Physical-World Limitations"
+states explicitly that a content hash proves content identity, not
+physical authenticity or capture time/place.
+
+**"Submission claims exceed live proof."** `SUBMISSION.md` → "What is
+proven" lists only what `docs/DEPLOYMENT.md` actually records with real
+addresses/transaction hashes, and explicitly does not claim "zero
+consensus disagreement" — the genuine `UNDETERMINED` case is documented,
+not hidden.
