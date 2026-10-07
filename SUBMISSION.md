@@ -12,7 +12,7 @@ handover, tracks custody and defect lineage, distinguishes normal wear
 from material change, verifies repairs, and exposes machine-readable
 condition certificates for downstream contracts.
 
-## What is proven as of this session
+## What is proven
 
 - Differentiation from Agent Warranty Protocol, Decision Memory Protocol,
   Reality Checkpoint Protocol, and Provenance Engine (`DECISION.md`).
@@ -20,24 +20,34 @@ condition certificates for downstream contracts.
   covering the Condition Delta Graph, Custody Chain Graph (with bounded
   delegation), Defect Identity + Lineage, Custody Causality / Temporal
   Attribution (typed classes only, never legal-causation language),
-  frozen Normal-Wear Policy, baseline propose/accept/dispute handshake,
-  custody-gap handling, Repair Verification, and the Portable Condition
-  Certificate.
+  frozen Normal-Wear Policy, evidence-assurance-tier enforcement,
+  baseline propose/accept/dispute handshake, custody-gap handling,
+  Repair Verification, real fresh-evidence Challenge re-evaluation, and
+  the Portable Condition Certificate.
 - 18 named invariants (`docs/INVARIANTS.md`), each covered by at least one
   Direct Mode test.
-- **48/48 Direct Mode tests passing** (`docs/RELEASE_CANDIDATE_VERIFICATION.md`),
-  including 6 forged-leader rejection cases and 15 adversarial
+- **55/55 Direct Mode tests passing** (`docs/RELEASE_CANDIDATE_VERIFICATION.md`),
+  including 8 forged-leader rejection cases and 15 adversarial
   output-hardening cases.
 - A substantive custom validator (`gl.vm.run_nondet_unsafe`), not
   `strict_eq` over raw prose (`docs/CONSENSUS.md`).
+- **Deployed and live-verified on Studionet** (`docs/DEPLOYMENT.md`):
+  canonical address `0x785503f0aB50C458813AdEE36B43937Ebb884077`, real
+  leader/validator consensus over public fixture evidence, a genuine
+  condition-delta + defect + repair + challenge-OVERTURNED cycle, a
+  genuine case of cross-model validator disagreement (`UNDETERMINED`,
+  correctly uncommitted), and a genuine negative/fail-closed case
+  (404 evidence → `EVIDENCE_UNAVAILABLE`). Two real bugs were found and
+  fixed during this live verification, documented rather than hidden.
 
 ## What is explicitly NOT claimed
 
-- No live Studionet deployment yet (`docs/DEPLOYMENT.md`).
 - No image/vision verification (HP17, `docs/EVIDENCE.md`).
 - No guaranteed legal attribution — attribution classes never claim
   causation (HP9).
 - No economics layer in v1 (by design, section 25 of the master spec).
+- No "zero consensus disagreement" — a genuine `UNDETERMINED` validator
+  disagreement is documented in `docs/DEPLOYMENT.md`, not hidden.
 - Not claimed as "first ever" or "globally unique."
 
 ## Do not claim

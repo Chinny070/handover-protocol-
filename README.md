@@ -80,8 +80,9 @@ Full handover/defect/repair state machines: `docs/ARCHITECTURE.md`,
 Writes: `register_asset, add_component, seal_asset_definition,
 propose_handover, add_baseline_evidence, accept_baseline, dispute_baseline,
 begin_custody, delegate_custody, mark_custody_gap, submit_return_evidence,
-evaluate_return, challenge_finding, submit_repair, verify_repair,
-close_handover, cancel_handover`.
+evaluate_return, challenge_finding(defect_id, reason_code, evidence_kind,
+source_url, content_hash), submit_repair, verify_repair, close_handover,
+cancel_handover`.
 
 Views: `get_asset, get_component, get_handover, get_active_custodian,
 get_custody_chain, get_defect, get_defect_history, get_open_defect_count,
@@ -89,10 +90,11 @@ get_condition_certificate, is_handover_clear`.
 
 ## Nondeterministic operations
 
-Exactly three call sites touch `gl.nondet.*`: evidence retrieval
+Exactly four call sites touch `gl.nondet.*`: evidence retrieval
 (`gl.nondet.web.get`), per-component condition/defect/attribution
-classification, and repair-receipt classification (both via
-`gl.nondet.exec_prompt`). Both are wrapped in a **custom**
+classification, repair-receipt classification, and challenge
+re-evaluation against fresh evidence (the latter three via
+`gl.nondet.exec_prompt`). All are wrapped in a **custom**
 `gl.vm.run_nondet_unsafe(leader_fn, validator_fn)` consensus call — not
 `strict_eq` over raw prose — where the validator independently re-derives
 the same typed finding and compares only decision-critical fields. See
@@ -107,8 +109,8 @@ digest assembly, and certificate field computation. See
 
 ## Equivalence / validator design
 
-See `docs/CONSENSUS.md`. Proven directly with six forged-leader rejection
-cases plus one honest-acceptance sanity check in
+See `docs/CONSENSUS.md`. Proven directly with eight forged-leader
+rejection cases plus one honest-acceptance sanity check in
 `tests/direct/test_handover_consensus.py`, using `gltest`'s
 `direct_vm.run_validator` cheatcode.
 
@@ -131,18 +133,24 @@ web/LLM/consensus logic of their own: `docs/INTEGRATION.md`.
 
 - No economics (payments/escrow/deposits/slashing) in v1 by design.
 - No image/vision verification claimed as load-bearing (HP17).
-- Challenge re-evaluation (`_classify_challenge`) is a conservative
-  deterministic placeholder pending fresh-evidence wiring — see
-  `docs/DEFECT_LINEAGE.md`.
-- Not yet deployed to Studionet — see `docs/DEPLOYMENT.md`.
+- `content_hash` is recorded but not cross-verified against live fetched
+  bytes in this release — see `docs/SECURITY.md`.
 
 ## Verification
 
-**Direct Mode: 48/48 tests passing.** See
+Deployed and live-verified on Studionet — see `docs/DEPLOYMENT.md` for
+the canonical address, transaction hashes, and the full recorded
+lifecycle (baseline → custody → real consensus → condition delta → defect
+→ repair → certificate, plus a genuine validator-disagreement case and a
+genuine negative/fail-closed case).
+
+**Direct Mode: 55/55 tests passing.** See
 `docs/RELEASE_CANDIDATE_VERIFICATION.md` for the exact command, counts,
-versions, and an honest list of what was *not* run this session (live
-deployment, GenVM schema/lint against a running node, Studionet
-integration tests).
+versions, and an honest list of what is still *not* run (a standalone
+GenVM static lint pass beyond "schema loads against the live
+deployment"; `tests/integration/test_handover_studionet.py` is still an
+explicit skip since the live lifecycle was driven by hand rather than by
+a single automated script — see `docs/DEPLOYMENT.md`).
 
 ```bash
 py -3.12 -m venv .venv-test
@@ -156,6 +164,6 @@ pytest tests/direct/ -v
 1. Read `DECISION.md` (why this primitive, why GenLayer, differentiation).
 2. Read `docs/INVARIANTS.md` (18 invariants; grep test files for the `HP`
    tag referenced in each test's docstring/comment).
-3. Run `pytest tests/direct/ -v` (48 tests, no network/deployment needed).
+3. Run `pytest tests/direct/ -v` (55 tests, no network/deployment needed).
 4. Read `docs/CONSENSUS.md` and `tests/direct/test_handover_consensus.py`
    for the forged-leader proof.

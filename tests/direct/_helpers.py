@@ -10,7 +10,11 @@ CONTRACT_PATH = Path(__file__).resolve().parents[2] / "contracts" / "handover_pr
 DEFAULT_POLICY = {
     "component_rules": {"bumper": "cosmetic", "engine": "functional"},
     "wear_budget": {"scuff_mm": 5, "scratch_count": 2},
-    "evidence_minimums": {"minor": ["SELF_REPORTED"], "major": ["SIGNED_INSPECTION"]},
+    "evidence_minimums": {
+        "minor": ["SELF_REPORTED"],
+        "major": ["SELF_REPORTED", "SIGNED_INSPECTION"],
+        "critical": ["SIGNED_INSPECTION"],
+    },
     "attribution_minimums": {"supported": ["WEB_RENDERED_INSPECTION"]},
     "repair_closure_requirements": {"receipt": True},
     "challenge_window": 3,

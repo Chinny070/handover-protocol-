@@ -20,6 +20,8 @@ being mistaken for a contract failure.
 import os
 import sys
 
+import pytest
+
 if sys.platform == "win32":
     _original_unlink = os.unlink
 
@@ -31,3 +33,14 @@ if sys.platform == "win32":
             pass
 
     os.unlink = _tolerant_unlink
+
+
+@pytest.fixture(autouse=True)
+def _enable_pickling_check(direct_vm):
+    """gltest's Direct Mode can validate that every run_nondet_unsafe
+    closure (leader_fn/validator_fn) is actually picklable -- the same
+    constraint real multi-process GenVM execution imposes. Enabled
+    session-wide so every test implicitly proves this, not just a
+    dedicated one (freeze checklist: "pickling green")."""
+    direct_vm.check_pickling = True
+    yield

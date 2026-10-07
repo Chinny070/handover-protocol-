@@ -41,20 +41,24 @@ resolvable match) creates a fresh `Defect` — see
 
 ## Challenges (bounded, HP12)
 
-`challenge_finding(defect_id, reason_code)` runs its own
-`run_nondet_unsafe` round and returns one of `UPHELD, MODIFIED, OVERTURNED,
-INCONCLUSIVE, EXTERNAL_FAILURE`. `challenge_count` is capped at
-`MAX_CHALLENGE_ROUNDS` (3); a fourth call is rejected outright
-(`test_max_challenge_rounds_bounded`). `OVERTURNED` moves the defect to
-`UNRESOLVED` (append-only history, original record untouched);
-`UPHELD`/`INCONCLUSIVE`/`EXTERNAL_FAILURE` leave status unchanged beyond
-the round counter.
+`challenge_finding(defect_id, reason_code, evidence_kind, source_url,
+content_hash)` takes fresh, independently retrievable evidence as part of
+the challenge itself. `_classify_challenge` runs its own
+`run_nondet_unsafe` round: it independently fetches that evidence
+(`_fetch_text`, same HP14 fail-closed-on-non-2xx behavior as condition
+classification) and asks the model to reconsider the recorded finding
+against it, returning one of `UPHELD, MODIFIED, OVERTURNED, INCONCLUSIVE,
+EXTERNAL_FAILURE`. Without evidence, or when the evidence is unreachable,
+the result can only be `EXTERNAL_FAILURE`/`INCONCLUSIVE` — never
+`UPHELD`/`MODIFIED`/`OVERTURNED` on reason-code rhetoric alone. The
+validator independently re-fetches the same evidence URL and re-derives
+its own result; a forged leader claiming `OVERTURNED` when the validator's
+own fetch fails is rejected
+(`test_forged_leader_claims_overturned_when_evidence_is_unreachable_is_rejected`
+in `tests/direct/test_handover_consensus.py`).
 
-**Known limitation:** `_classify_challenge` in this release is a
-conservative deterministic placeholder (`UPHELD` unless the reason code
-itself is unrecognized) rather than a full independent re-evaluation
-against fresh challenge evidence. The typed-output-hardening and
-bounded-rounds machinery around it is real and tested; wiring fresh
-challenge evidence through the same validated path as
-`_classify_component` is the concrete next step for a follow-on release
-(see `docs/RELEASE_CANDIDATE_VERIFICATION.md`).
+`challenge_count` is capped at `MAX_CHALLENGE_ROUNDS` (3); a fourth call
+is rejected outright (`test_max_challenge_rounds_bounded`). `OVERTURNED`
+moves the defect to `UNRESOLVED` (append-only history, original record
+untouched); `UPHELD`/`INCONCLUSIVE`/`EXTERNAL_FAILURE` leave status
+unchanged beyond the round counter.

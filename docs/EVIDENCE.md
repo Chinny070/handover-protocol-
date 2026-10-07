@@ -17,15 +17,23 @@ accepted by `add_baseline_evidence`/`submit_return_evidence`/
 
 ## Assurance tiers
 
-Evidence carries a caller-asserted `assurance_tier` (e.g.
-`SELF_REPORTED`). This release does not yet enforce per-severity minimum
-assurance tiers in deterministic code (the frozen policy's
-`evidence_minimums`/`attribution_minimums` keys are validated as present
-at seal time but not yet cross-checked against submitted evidence tier in
-`evaluate_return`) — this is a known gap, see "Limitations" below. A
-self-reported note is never silently relabeled as independently verified
-anywhere in this contract: the tier field is passed through unchanged, it
-is never upgraded.
+Evidence carries a caller-asserted `assurance_tier`, one of
+`SIGNED_INSPECTION`, `MULTI_SOURCE_CORROBORATED`,
+`INDEPENDENT_PUBLIC_SOURCE`, `SINGLE_PUBLIC_SOURCE`, `SELF_REPORTED`,
+`HASH_COMMITMENT_ONLY`, `UNVERIFIED` — an unknown tier is rejected at
+submission. The frozen policy's `evidence_minimums` maps a severity
+bucket (`minor`/`major`/`critical`) to the tiers that may support a
+finding of that severity. This is enforced deterministically in
+`_evidence_meets_minimum`, called from `_apply_findings` *after*
+consensus already agreed on a typed finding: if the submitted evidence
+for that component doesn't meet the bar, the finding is downgraded to
+`INCONCLUSIVE` rather than recording a defect — it is never silently
+accepted, and never silently dropped as if nothing changed. A severity
+bucket with no entry in the policy fails closed the same way (see
+`tests/direct/test_handover_evidence_assurance.py`). A self-reported note
+is never silently relabeled as independently verified anywhere in this
+contract: the tier field is passed through unchanged, it is never
+upgraded — it is only ever checked for sufficiency.
 
 ## Physical-World Limitations
 

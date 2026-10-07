@@ -74,10 +74,21 @@ anything other than whatever was actually recorded.
 **Delegation overreach.** Rejected by the scope-subset and depth-bound
 checks (HP11).
 
-**Challenge spam.** Bounded by `MAX_CHALLENGE_ROUNDS` (HP12).
+**Challenge spam.** Bounded by `MAX_CHALLENGE_ROUNDS` (HP12). A challenge
+without evidence, or with unreachable evidence, can only reach
+`INCONCLUSIVE`/`EXTERNAL_FAILURE` — the reason code alone carries no
+authority to overturn a finding (see `docs/DEFECT_LINEAGE.md`).
 
 **Repair fraud.** A receipt is evidence, not authority — see
 `docs/REPAIRS.md`.
+
+**Weak evidence inflating severity.** A self-reported note cannot
+silently satisfy the evidence bar for a MAJOR/CRITICAL finding: the
+frozen policy's `evidence_minimums` is enforced deterministically in
+`_evidence_meets_minimum` after consensus already agreed on a severity —
+an insufficient tier downgrades the outcome to `INCONCLUSIVE` rather than
+recording the defect (`tests/direct/test_handover_evidence_assurance.py`).
+Missing policy coverage for a severity fails closed the same way.
 
 **Visual overclaim.** This release makes no image/vision verification
 claim (HP17); see `docs/EVIDENCE.md`.
@@ -95,9 +106,4 @@ matrix.
 
 - `content_hash` is recorded but not cross-verified against live fetched
   bytes in this release.
-- `_classify_challenge` is a conservative placeholder, not a full
-  independent re-evaluation (see `docs/DEFECT_LINEAGE.md`).
-- Evidence-assurance-tier minimums (section 10 of the master spec) are
-  validated as present in the frozen policy but not yet cross-checked
-  deterministically against submitted evidence tiers per severity.
 - No economic/slashing layer exists in v1 by design (section 25).

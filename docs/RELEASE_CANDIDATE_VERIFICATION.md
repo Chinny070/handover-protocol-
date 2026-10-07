@@ -53,14 +53,14 @@ throughout `contracts/handover_protocol.py`:
 ## Direct Mode: green
 
 ```text
-collected: 48
-passed: 48
+collected: 56
+passed: 55
 failed: 0
-skipped: 0
-duration: ~8-15s (full suite, warm SDK cache)
+skipped: 1
+duration: ~9-42s (full suite, warm SDK cache; variance is network/SDK-cache related, not flakiness)
 Python: 3.12.10
 genlayer-test: 0.29.2
-command: pytest tests/direct/ -v
+command: pytest tests/ -v
 ```
 
 Breakdown by file:
@@ -75,23 +75,43 @@ Breakdown by file:
 - `test_handover_custody.py` — 4 passed (delegation scope-subset
   enforcement, delegation depth bound, custody-gap recording and
   certificate reflection, unknown gap-state rejection).
-- `test_handover_defects.py` — 5 passed (contract-assigned sequential
+- `test_handover_defects.py` — 7 passed (contract-assigned sequential
   defect IDs, worsening with append-only history, invented-matched-id
   fail-closed, bounded challenge rounds, unknown challenge-reason
-  rejection).
+  rejection, real challenge OVERTURNED by fresh contradicting evidence,
+  challenge with unreachable evidence fails closed to EXTERNAL_FAILURE).
 - `test_handover_hardening.py` — 15 passed (malformed JSON, fenced JSON
   recovery, missing keys, smuggled extra fields, unknown enum, bool-for-int,
   float-for-int, truthy-string-for-bool, int-for-bool, invented
   evidence-id-shaped field, invented matched-defect-id, oversized
   rationale list, non-dict payload, empty string payload, prompt-injection
   text proven inert).
-- `test_handover_consensus.py` — 8 passed (six distinct forged-leader
+- `test_handover_consensus.py` — 9 passed (eight distinct forged-leader
   rejection cases via `direct_vm.run_validator` — including a
-  `matched_defect_id`-mismatch case found and fixed during post-build
-  review — plus one honest-leader acceptance sanity check).
+  `matched_defect_id`-mismatch case and a forged-challenge-OVERTURNED
+  case, both found and fixed/tested during post-build review — plus one
+  honest-leader acceptance sanity check).
 - `test_handover_repairs.py` — 5 passed (repaired, not-repaired reopening,
   external-failure-is-not-repaired-or-failure, bounded repair rounds,
   re-submission gating).
+- `test_handover_evidence_assurance.py` — 4 passed (CRITICAL finding on
+  SELF_REPORTED evidence fails closed to INCONCLUSIVE, the same finding
+  on SIGNED_INSPECTION evidence is accepted, unknown assurance tier
+  rejected at submission, missing policy coverage for a severity fails
+  closed).
+- `tests/integration/test_handover_studionet.py` — 1 skipped (explicit
+  stub; the live lifecycle was driven by hand instead — see
+  docs/DEPLOYMENT.md).
+
+## Pickling validation: green
+
+`gltest.direct`'s `VMContext.check_pickling` flag validates that every
+`run_nondet_unsafe(leader_fn, validator_fn)` closure is actually
+picklable — the same constraint real multi-process GenVM execution
+imposes. Enabled session-wide via an autouse fixture in
+`tests/direct/conftest.py` rather than left as a one-off opt-in, so every
+test (not just a dedicated one) proves this. All 55 tests pass with it
+enabled.
 
 ## Windows Direct Mode tempfile/unlink issue (spec section 17)
 

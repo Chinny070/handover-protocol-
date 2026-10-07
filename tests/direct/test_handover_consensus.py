@@ -385,3 +385,46 @@ def test_honest_leader_result_is_accepted(direct_vm):
     c.evaluate_return(handover_id=hid)
     accepted = direct_vm.run_validator()  # replays the stored honest leader result
     assert accepted is True
+
+
+def test_forged_leader_claims_overturned_when_evidence_is_unreachable_is_rejected(direct_vm):
+    """_classify_challenge's leader/validator consensus must also reject a
+    forged leader: claiming OVERTURNED when the validator's own
+    independent fetch of the same challenge evidence fails
+    (EXTERNAL_FAILURE), not just the component-classification consensus."""
+    c, aid, cid, hid, renter = _start_return_pending(direct_vm)
+    direct_vm.mock_web("example.com/inspect", {"status": 200, "body": "Dent."})
+    direct_vm.mock_llm(
+        ".*",
+        finding(
+            condition_class="NEW_MINOR_DAMAGE",
+            defect_relation="NEW_DISTINCT_DEFECT",
+            severity="MINOR",
+            attribution_class="SUPPORTED_AS_NEW_IN_INTERVAL",
+        ),
+    )
+    c.submit_return_evidence(
+        handover_id=hid,
+        evidence_kind="WEB_RENDERED_INSPECTION",
+        source_url="https://example.com/inspect",
+        content_hash="h",
+        component_ids=[cid],
+        assurance_tier="SELF_REPORTED",
+    )
+    c.evaluate_return(handover_id=hid)
+    did = c.get_asset(asset_id=aid)["defect_ids"][0]
+
+    direct_vm.clear_mocks()
+    # No mock_web for the challenge evidence URL -> validator's own
+    # independent re-fetch fails -> its honest answer is EXTERNAL_FAILURE.
+    c.challenge_finding(
+        defect_id=did,
+        reason_code="PRE_EXISTING_EVIDENCE",
+        evidence_kind="SIGNED_INSPECTION_RECORD",
+        source_url="https://unreachable.example/nothing",
+        content_hash="hc",
+    )
+
+    forged = {"result": "OVERTURNED"}
+    accepted = direct_vm.run_validator(leader_result=forged)
+    assert accepted is False

@@ -2,8 +2,8 @@
 
 ## Status: deployed to Studionet, full live lifecycle proven (Gates 1-3)
 
-**Canonical contract address:** `0xD16141830b78A71b6F594d90fa4E1a6eF717DE85`
-**Deployment transaction:** `0xdb4bd58b179a6614f3d55b261a1f10355ac52534485cbdf1cc854492c162def4`
+**Canonical contract address:** `0x785503f0aB50C458813AdEE36B43937Ebb884077`
+**Deployment transaction:** `0xa6a928f625cc3349f404972e40ca1a0920f81683f65a85aa0ecae4b271991a3b`
 **Network:** Genlayer Studio Network (`studionet`, chainId `61999`)
 **Explorer:** https://genlayer-explorer.vercel.app (search the tx hash or
 address above)
@@ -13,18 +13,18 @@ address above)
 Verified independently, not just the CLI's own echo:
 
 - `genlayer receipt <tx>` → `status_name: 'FINALIZED'`, leader result
-  `{ status: 'return', payload: null }` (5/5 validators AGREE).
+  `{ status: 'return', payload: null }` (3/5 validators AGREE, majority).
 - `genlayer schema <address>` → 27 methods with the full expected ABI.
 - `python scripts/source_parity.py` → `PASS`: byte-for-byte identical to
   `contracts/handover_protocol.py` in this working tree.
 
-This is the **second** deployment. The first
-(`0x796bfBD33C7fFD8330F8ff6cCD46681B7E938ACe`, tx
-`0x491be3b3d45bf875e3c968e6eec273362125652650386c9733cba48f6f14a2b1`) was
-superseded after the live lifecycle run below surfaced a real bug in
-`_fetch_text` (see "Bugs found during live verification"). That first
-deployment itself superseded an even earlier one that failed outright
-over a bad dependency pin. Neither earlier address is canonical.
+This is the **third** deployment, superseding
+`0xD16141830b78A71b6F594d90fa4E1a6eF717DE85` (which fixed the
+`_fetch_text` HTTP-status bug below, but predates the evidence-assurance
+and real-challenge wiring), which itself superseded
+`0x796bfBD33C7fFD8330F8ff6cCD46681B7E938ACe` (which predates the
+HTTP-status fix), which itself superseded a first attempt that failed
+outright over a bad dependency pin. No earlier address is canonical.
 
 ## Live handover lifecycle proof (section 31 of the master spec)
 
@@ -95,6 +95,39 @@ handled every one of those disagreements correctly.
 `genlayer call get_handover`). See "Bugs found during live verification"
 below for what this run caught.
 
+### Evidence-assurance-tier enforcement — asset A1 / handovers H1, H2
+(on the current canonical deployment)
+
+Proves `_evidence_meets_minimum` (section 10) is genuinely load-bearing
+on-chain, not just in Direct Mode:
+
+1. **H1** (policy requires `SIGNED_INSPECTION` for a MAJOR finding):
+   return evidence submitted with `assurance_tier: SELF_REPORTED`
+   pointing at the damaged-bumper fixture. `evaluate_return(H1)` →
+   consensus (leader + validator) genuinely agreed on
+   `NEW_MAJOR_DAMAGE`/`MAJOR`/`evidence_sufficient: true` — but the
+   deterministic policy check downgraded the outcome to `INCONCLUSIVE`
+   because the submitted tier didn't clear the policy's bar. Confirmed
+   via `get_asset(A1).defect_ids == []`: no defect was created despite
+   the model's own agreement.
+2. **H2** (same policy, same fixture): return evidence resubmitted with
+   `assurance_tier: SIGNED_INSPECTION`. `evaluate_return(H2)` →
+   `DEFECTS_RECORDED`, defect `D1` created with `severity: MAJOR`.
+
+### Real challenge re-evaluation — defect D1
+
+`_classify_challenge` used to be a conservative placeholder that always
+returned `UPHELD`. It now independently retrieves fresh challenge
+evidence and lets the model reconsider the finding against it. Proof:
+`challenge_finding(D1, PRE_EXISTING_EVIDENCE, SIGNED_INSPECTION_RECORD,
+...)` pointed at a fresh fixture
+(`fixtures/vehicle_challenge_preexisting_proof.txt`, pushed before use)
+stating the same damage was already present at baseline. Result:
+`OVERTURNED` (real consensus, not a hardcoded answer) — confirmed via
+`get_defect(D1).status == 'UNRESOLVED'` and
+`get_defect_history(D1)` showing the original `OPEN` event preserved
+with the new `UNRESOLVED` event appended (append-only, HP8).
+
 ## Bugs found during live verification (fixed, not hidden)
 
 **1. `_fetch_text` didn't check HTTP status (contract bug, fixed).**
@@ -129,14 +162,13 @@ private key ever printed).
 
 ## What's still outstanding
 
-- `_classify_challenge` is a conservative placeholder (documented in
-  `docs/DEFECT_LINEAGE.md`/`docs/SECURITY.md`), confirmed live: the
-  challenge call above returned `UPHELD` regardless of fresh evidence,
-  as expected for the current implementation.
-- Evidence-assurance-tier enforcement against submitted evidence is not
-  yet wired in (separate tracked follow-up).
 - GenVM lint beyond "schema loads against a live deployment" — no deeper
   static-analysis subcommand was discoverable in this CLI version.
+- `tests/integration/test_handover_studionet.py` is still an explicit
+  skip — the live lifecycle above was driven by hand via
+  `scripts/gl_write.js`/`genlayer call`/`genlayer receipt`, documented
+  step-by-step here, rather than by a single automated integration test
+  targeting the canonical address.
 
 ## Canonical vs. disposable
 

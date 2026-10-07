@@ -161,11 +161,27 @@ def test_max_challenge_rounds_bounded(direct_vm):
     )
     did = c.get_asset(asset_id=aid)["defect_ids"][0]
 
+    direct_vm.clear_mocks()
+    direct_vm.mock_web("example.com/challenge", {"status": 200, "body": "Nothing new; severity assessment stands."})
+    direct_vm.mock_llm(".*", '{"result": "UPHELD"}')
+
     for _ in range(3):  # MAX_CHALLENGE_ROUNDS = 3
-        c.challenge_finding(defect_id=did, reason_code="WRONG_SEVERITY")
+        c.challenge_finding(
+            defect_id=did,
+            reason_code="WRONG_SEVERITY",
+            evidence_kind="STRUCTURED_CHECKLIST",
+            source_url="https://example.com/challenge",
+            content_hash="hc",
+        )
 
     with direct_vm.expect_revert("challenge bound exceeded"):
-        c.challenge_finding(defect_id=did, reason_code="WRONG_SEVERITY")
+        c.challenge_finding(
+            defect_id=did,
+            reason_code="WRONG_SEVERITY",
+            evidence_kind="STRUCTURED_CHECKLIST",
+            source_url="https://example.com/challenge",
+            content_hash="hc",
+        )
 
 
 def test_unknown_challenge_reason_rejected(direct_vm):
@@ -181,4 +197,74 @@ def test_unknown_challenge_reason_rejected(direct_vm):
     )
     did = c.get_asset(asset_id=aid)["defect_ids"][0]
     with direct_vm.expect_revert("unknown challenge reason"):
-        c.challenge_finding(defect_id=did, reason_code="NOT_A_REAL_REASON")
+        c.challenge_finding(
+            defect_id=did,
+            reason_code="NOT_A_REAL_REASON",
+            evidence_kind="STRUCTURED_CHECKLIST",
+            source_url="https://example.com/challenge",
+            content_hash="hc",
+        )
+
+
+def test_challenge_overturned_by_fresh_contradicting_evidence(direct_vm):
+    """_classify_challenge independently retrieves fresh evidence and
+    lets the model reconsider the finding against it -- this is not the
+    old placeholder that always UPHELD regardless of evidence."""
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    cid = comps["bumper"]
+    renter = renter_address("renter")
+    _, status = _handover_through_return(
+        c, direct_vm, aid, cid, renter,
+        "Dent.",
+        finding(condition_class="NEW_MINOR_DAMAGE", defect_relation="NEW_DISTINCT_DEFECT",
+                severity="MINOR", attribution_class="SUPPORTED_AS_NEW_IN_INTERVAL"),
+    )
+    did = c.get_asset(asset_id=aid)["defect_ids"][0]
+
+    direct_vm.clear_mocks()
+    direct_vm.mock_web(
+        "example.com/preexisting-proof",
+        {"status": 200, "body": "Pre-handover inspection photo, timestamped before custody began, clearly shows this exact dent already present."},
+    )
+    direct_vm.mock_llm(".*", '{"result": "OVERTURNED"}')
+
+    result = c.challenge_finding(
+        defect_id=did,
+        reason_code="PRE_EXISTING_EVIDENCE",
+        evidence_kind="SIGNED_INSPECTION_RECORD",
+        source_url="https://example.com/preexisting-proof",
+        content_hash="hc",
+    )
+    assert result == "OVERTURNED"
+    assert c.get_defect(defect_id=did)["status"] == "UNRESOLVED"
+
+
+def test_challenge_with_unreachable_evidence_is_external_failure_not_overturned(direct_vm):
+    """An unreachable challenge evidence source must fail closed to
+    EXTERNAL_FAILURE, never silently becoming OVERTURNED/UPHELD (HP14)."""
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    cid = comps["bumper"]
+    renter = renter_address("renter")
+    _, status = _handover_through_return(
+        c, direct_vm, aid, cid, renter,
+        "Dent.",
+        finding(condition_class="NEW_MINOR_DAMAGE", defect_relation="NEW_DISTINCT_DEFECT",
+                severity="MINOR", attribution_class="SUPPORTED_AS_NEW_IN_INTERVAL"),
+    )
+    did = c.get_asset(asset_id=aid)["defect_ids"][0]
+
+    direct_vm.clear_mocks()
+    # No mock_web registered for this URL -> fetch fails -> EXTERNAL_FAILURE,
+    # and the unmocked LLM call must never even be reached.
+    result = c.challenge_finding(
+        defect_id=did,
+        reason_code="WRONG_SEVERITY",
+        evidence_kind="STRUCTURED_CHECKLIST",
+        source_url="https://unreachable.example/nothing",
+        content_hash="hc",
+    )
+    assert result == "EXTERNAL_FAILURE"
+    defect = c.get_defect(defect_id=did)
+    assert defect["status"] == "OPEN"  # unchanged

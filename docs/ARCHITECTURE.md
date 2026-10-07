@@ -47,15 +47,14 @@ such field is bounded (HP15).
 
 ## Deterministic vs. nondeterministic boundary
 
-Every call into `gl.nondet.*` lives in exactly three places:
-`_fetch_text` (web retrieval), `_classify_component` (condition/defect/
-attribution classification), and `_classify_repair` (repair verification).
-`_classify_challenge` is a deterministic placeholder today (see
-`docs/REPAIRS.md`/`docs/CONSENSUS.md` for why). All three nondeterministic
-entry points are wrapped through `gl.vm.run_nondet_unsafe(leader_fn,
-validator_fn)` with a validator that independently re-derives the same
-typed finding and compares only the *critical fields* (never free-text
-rationale) — see `docs/CONSENSUS.md`.
+Every call into `gl.nondet.*` lives in exactly four places: `_fetch_text`
+(web retrieval), `_classify_component` (condition/defect/attribution
+classification), `_classify_repair` (repair verification), and
+`_classify_challenge` (fresh-evidence reconsideration of a recorded
+finding). All four nondeterministic entry points are wrapped through
+`gl.vm.run_nondet_unsafe(leader_fn, validator_fn)` with a validator that
+independently re-derives the same typed finding and compares only the
+*critical fields* (never free-text rationale) — see `docs/CONSENSUS.md`.
 
 Everything else — ID assignment, ownership/caller checks, custody overlap
 and delegation-scope checks, bound enforcement, defect lifecycle
