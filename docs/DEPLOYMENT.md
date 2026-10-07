@@ -5,8 +5,8 @@
 **Canonical contract address:** `0x785503f0aB50C458813AdEE36B43937Ebb884077`
 **Deployment transaction:** `0xa6a928f625cc3349f404972e40ca1a0920f81683f65a85aa0ecae4b271991a3b`
 **Network:** Genlayer Studio Network (`studionet`, chainId `61999`)
-**Explorer:** https://genlayer-explorer.vercel.app (search the tx hash or
-address above)
+**Explorer (contract page, verified live — 17 real transactions):**
+https://explorer-studio.genlayer.com/address/0x785503f0aB50C458813AdEE36B43937Ebb884077
 **Deployer account:** `0xaffE15eEc45b68835cc9E5B4Ab85dD5deaE8e70b`
 (`my-studionet-wallet`)
 
