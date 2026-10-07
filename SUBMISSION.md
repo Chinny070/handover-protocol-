@@ -20,25 +20,30 @@ condition certificates for downstream contracts.
   covering the Condition Delta Graph, Custody Chain Graph (with bounded
   delegation), Defect Identity + Lineage, Custody Causality / Temporal
   Attribution (typed classes only, never legal-causation language),
-  frozen Normal-Wear Policy, evidence-assurance-tier enforcement,
+  frozen Normal-Wear Policy, evidence-assurance-tier enforcement bound to
+  the actually-classified evidence item, per-method caller authorization,
   baseline propose/accept/dispute handshake, custody-gap handling,
   Repair Verification, real fresh-evidence Challenge re-evaluation, and
   the Portable Condition Certificate.
 - 18 named invariants (`docs/INVARIANTS.md`), each covered by at least one
   Direct Mode test.
-- **55/55 Direct Mode tests passing** (`docs/RELEASE_CANDIDATE_VERIFICATION.md`),
-  including 8 forged-leader rejection cases and 15 adversarial
-  output-hardening cases.
+- **67/67 Direct Mode tests + 3/3 real-network integration tests passing**
+  (`docs/RELEASE_CANDIDATE_VERIFICATION.md`), including 8 forged-leader
+  rejection cases, 15 adversarial output-hardening cases, and 12
+  stranger/owner/custodian authorization cases.
 - A substantive custom validator (`gl.vm.run_nondet_unsafe`), not
   `strict_eq` over raw prose (`docs/CONSENSUS.md`).
 - **Deployed and live-verified on Studionet** (`docs/DEPLOYMENT.md`):
-  canonical address `0x785503f0aB50C458813AdEE36B43937Ebb884077`, real
+  canonical address `0x4b4D04B5268cC7e20ea6970947Cf2f9b29B0aB92`, real
   leader/validator consensus over public fixture evidence, a genuine
   condition-delta + defect + repair + challenge-OVERTURNED cycle, a
   genuine case of cross-model validator disagreement (`UNDETERMINED`,
-  correctly uncommitted), and a genuine negative/fail-closed case
-  (404 evidence → `EVIDENCE_UNAVAILABLE`). Two real bugs were found and
-  fixed during this live verification, documented rather than hidden.
+  correctly uncommitted), a genuine negative/fail-closed case (404
+  evidence → `EVIDENCE_UNAVAILABLE`), and a genuine stranger-rejected
+  authorization attempt (confirmed via the reverted transaction's own
+  traceback). Several real bugs were found and fixed across two rounds of
+  verification — an internal live-lifecycle pass and an external security
+  review — all documented rather than hidden.
 
 ## What is explicitly NOT claimed
 

@@ -147,6 +147,36 @@ ASSURANCE_TIERS = {
     "UNVERIFIED",
 }
 
+# A submitter can always self-label weakly (SELF_REPORTED/UNVERIFIED), but
+# a stronger tier can only be claimed for an evidence_kind that could
+# plausibly carry that property. This does not cryptographically prove
+# the claim -- it closes the trivial hole where any caller labels a plain
+# web page SIGNED_INSPECTION regardless of evidence_kind.
+ALWAYS_ALLOWED_TIERS = {"SELF_REPORTED", "UNVERIFIED"}
+TIERS_REQUIRING_MATCHING_KIND = {
+    "SIGNED_INSPECTION": {"SIGNED_INSPECTION_RECORD"},
+    "HASH_COMMITMENT_ONLY": {"HASH_COMMITMENT"},
+    "MULTI_SOURCE_CORROBORATED": {
+        "WEB_RENDERED_INSPECTION", "PUBLIC_DOCUMENT", "API_RESPONSE",
+        "SENSOR_OR_TELEMETRY_RECORD", "SERVICE_RECORD",
+    },
+    "INDEPENDENT_PUBLIC_SOURCE": {
+        "WEB_RENDERED_INSPECTION", "PUBLIC_DOCUMENT", "API_RESPONSE",
+        "SENSOR_OR_TELEMETRY_RECORD", "SERVICE_RECORD",
+    },
+    "SINGLE_PUBLIC_SOURCE": {
+        "WEB_RENDERED_INSPECTION", "PUBLIC_DOCUMENT", "API_RESPONSE",
+        "SENSOR_OR_TELEMETRY_RECORD", "SERVICE_RECORD",
+    },
+}
+
+
+def _tier_allowed_for_kind(tier: str, kind: str) -> bool:
+    if tier in ALWAYS_ALLOWED_TIERS:
+        return True
+    return kind in TIERS_REQUIRING_MATCHING_KIND.get(tier, set())
+
+
 CRITICAL_FIELDS = (
     "component_id",
     "condition_class",
@@ -199,6 +229,11 @@ class Evidence:
     handover_id: str
     evidence_kind: str
     source_url: str
+    # Caller-asserted, bounded-length only. NOT cryptographically verified
+    # against fetched bytes by this contract (see docs/SECURITY.md
+    # Limitations, docs/EVIDENCE.md). It is downstream tamper-evidence
+    # tooling's raw material, not a proven content commitment this
+    # contract itself checks or relies on for any state transition.
     content_hash: str
     submitted_by: Address
     assurance_tier: str
@@ -425,6 +460,12 @@ class HandoverProtocol(gl.Contract):
         asset = self.assets[asset_id]
         if asset.status != "SEALED":
             raise Exception("asset not sealed")
+        if not parent_handover_id and gl.message.sender_address != asset.owner:
+            # Delegated proposals are authorized below (sender must be the
+            # parent's current custodian). A primary proposal with no
+            # parent must come from the asset owner -- otherwise any
+            # address could originate custody of any sealed asset.
+            raise Exception("only the asset owner may propose primary custody")
 
         known_ids = set(self._json_list(asset.component_ids_json))
         scope = list(dict.fromkeys(scope_component_ids))  # dedupe, preserve order
@@ -498,6 +539,7 @@ class HandoverProtocol(gl.Contract):
         assurance_tier: str,
     ) -> str:
         handover = self._get_handover(handover_id)
+        self._require_handover_party(handover)
         if handover.status != "BASELINE_PROPOSED":
             raise Exception("baseline is not open for evidence (HP1)")
         if evidence_kind not in EVIDENCE_KINDS:
@@ -524,6 +566,11 @@ class HandoverProtocol(gl.Contract):
         assurance_tier: str,
     ) -> str:
         handover = self._get_handover(handover_id)
+        if gl.message.sender_address != handover.to_party:
+            # The current custodian is the one returning the asset; an
+            # unrelated address must not be able to inject return evidence
+            # into someone else's handover.
+            raise Exception("only the current custodian may submit return evidence")
         if handover.status not in ("ACTIVE", "RETURN_PENDING"):
             raise Exception("custody interval is not active")
         if evidence_kind not in EVIDENCE_KINDS:
@@ -553,6 +600,18 @@ class HandoverProtocol(gl.Contract):
         content_hash = self._bound_text(content_hash, 256, "content_hash")
         if assurance_tier not in ASSURANCE_TIERS:
             raise Exception("unknown assurance tier")
+        if not _tier_allowed_for_kind(assurance_tier, evidence_kind):
+            raise Exception(f"assurance tier {assurance_tier} is not claimable for evidence kind {evidence_kind}")
+        component_ids = list(component_ids)
+        if not component_ids:
+            raise Exception("evidence must reference at least one component")
+        asset_component_ids = set(self._json_list(self.assets[handover.asset_id].component_ids_json))
+        handover_scope = set(self._json_list(handover.scope_json))
+        for cid in component_ids:
+            if cid not in asset_component_ids:
+                raise Exception(f"component {cid} is not part of this asset")
+            if cid not in handover_scope:
+                raise Exception(f"component {cid} is outside this handover's scope")
         evidence_id = self._next_id("E", "evidence_count")
         self.evidence[evidence_id] = Evidence(
             evidence_id=evidence_id,
@@ -571,6 +630,26 @@ class HandoverProtocol(gl.Contract):
         if handover_id not in self.handovers:
             raise Exception("unknown handover")
         return self.handovers[handover_id]
+
+    def _require_handover_party(self, handover: Handover) -> None:
+        sender = gl.message.sender_address
+        if sender != handover.from_party and sender != handover.to_party:
+            raise Exception("caller is not a party to this handover")
+
+    def _require_defect_party(self, defect: "Defect") -> None:
+        """A defect's interested parties: the asset owner, and the
+        from_party/to_party of the custody interval in which the defect
+        was first observed. Covers both the primary owner and whichever
+        custodian was party to the handover the defect arose from."""
+        sender = gl.message.sender_address
+        asset = self.assets[defect.asset_id]
+        allowed = {asset.owner}
+        if defect.first_handover_id and defect.first_handover_id in self.handovers:
+            h = self.handovers[defect.first_handover_id]
+            allowed.add(h.from_party)
+            allowed.add(h.to_party)
+        if sender not in allowed:
+            raise Exception("caller is not a party to this defect's custody interval")
 
     @gl.public.write
     def accept_baseline(self, handover_id: str) -> None:
@@ -596,6 +675,7 @@ class HandoverProtocol(gl.Contract):
     @gl.public.write
     def begin_custody(self, handover_id: str) -> None:
         handover = self._get_handover(handover_id)
+        self._require_handover_party(handover)
         if handover.status != "ACCEPTED":
             raise Exception("baseline not accepted")
         asset = self.assets[handover.asset_id]
@@ -625,6 +705,7 @@ class HandoverProtocol(gl.Contract):
         if gap_state not in GAP_STATES:
             raise Exception("unknown gap state")
         handover = self._get_handover(handover_id)
+        self._require_handover_party(handover)
         handover.custody_gap = gap_state
 
     # ------------------------------------------------------------------
@@ -637,6 +718,7 @@ class HandoverProtocol(gl.Contract):
         and deterministically applies the typed findings to contract state.
         Returns the terminal handover status."""
         handover = self._get_handover(handover_id)
+        self._require_handover_party(handover)
         if handover.status != "RETURN_PENDING":
             raise Exception("no return evidence submitted")
 
@@ -717,12 +799,22 @@ class HandoverProtocol(gl.Contract):
 
     def _evidence_meets_minimum(self, severity: str, cid: str, policy: dict, evidence_tiers_by_component: dict) -> bool:
         """Deterministic policy enforcement (section 10): a finding's
-        severity may only be accepted if at least one evidence item
-        submitted for that component meets the frozen policy's assurance
-        minimum for that severity. Never left to the model's own
+        severity may only be accepted if the evidence item actually used
+        to classify this component -- i.e. the first evidence item for
+        this component, index-aligned with what _classify_component
+        fetches as urls[0] -- meets the frozen policy's assurance minimum
+        for that severity. Never left to the model's own
         "evidence_sufficient" self-assessment -- that field is advisory
         model output, not a policy decision. Missing policy coverage for a
-        severity fails closed (does not default to accepting)."""
+        severity fails closed (does not default to accepting).
+
+        Deliberately checks only the classified evidence item (index 0),
+        not "any evidence item submitted for this component": a caller
+        could otherwise attach a weak WEB_RENDERED_INSPECTION item that
+        the model actually reads, plus an unrelated strong
+        SIGNED_INSPECTION_RECORD item never fetched or read by anyone,
+        and have the strong item's tier alone satisfy the policy check for
+        a finding that was never actually backed by it."""
         if severity == "NONE":
             return True
         minimums = policy.get("evidence_minimums", {})
@@ -730,7 +822,9 @@ class HandoverProtocol(gl.Contract):
         if not allowed_tiers:
             return False
         submitted_tiers = evidence_tiers_by_component.get(cid, [])
-        return any(tier in allowed_tiers for tier in submitted_tiers)
+        if not submitted_tiers:
+            return False
+        return submitted_tiers[0] in allowed_tiers
 
     def _apply_findings(
         self,
@@ -910,6 +1004,7 @@ class HandoverProtocol(gl.Contract):
         if evidence_kind not in EVIDENCE_KINDS:
             raise Exception("unknown evidence kind")
         d = self.defects[defect_id]
+        self._require_defect_party(d)
         if int(d.challenge_count) >= MAX_CHALLENGE_ROUNDS:
             raise Exception("challenge bound exceeded (HP12)")
 
@@ -968,6 +1063,7 @@ class HandoverProtocol(gl.Contract):
         if evidence_kind not in EVIDENCE_KINDS:
             raise Exception("unknown evidence kind")
         d = self.defects[defect_id]
+        self._require_defect_party(d)
         if d.status not in ("OPEN", "WORSENED", "PARTIALLY_REPAIRED"):
             raise Exception("defect is not open for repair")
         if int(d.repair_count) >= MAX_REPAIR_ROUNDS:
@@ -994,6 +1090,7 @@ class HandoverProtocol(gl.Contract):
         if defect_id not in self.defects:
             raise Exception("unknown defect")
         d = self.defects[defect_id]
+        self._require_defect_party(d)
         if d.status != "REPAIR_CLAIMED":
             raise Exception("no repair claim pending")
         receipt_url = self.evidence[d.latest_receipt_id].source_url if d.latest_receipt_id else ""
@@ -1033,6 +1130,7 @@ class HandoverProtocol(gl.Contract):
     @gl.public.write
     def close_handover(self, handover_id: str) -> None:
         handover = self._get_handover(handover_id)
+        self._require_handover_party(handover)
         if handover.status not in ("RETURN_CLEAR", "DEFECTS_RECORDED", "INCONCLUSIVE", "EVIDENCE_UNAVAILABLE"):
             raise Exception("handover not ready to close")
         handover.status = "CLOSED"

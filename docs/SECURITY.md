@@ -30,6 +30,22 @@ accept/dispute someone else's baseline (`only the receiving party` check)
 or delegate custody they don't hold (`only current custodian may
 delegate`).
 
+**Unauthorized strangers (found and fixed during post-build review).**
+Originally most write methods had no caller restriction at all: any
+address could originate primary custody of someone else's sealed asset,
+inject baseline/return evidence into a handover it had nothing to do
+with, trigger `evaluate_return`, flip `mark_custody_gap`, or burn a
+defect's bounded challenge/repair rounds. Every write method that mutates
+handover or defect state now requires the caller to be an actual party:
+`propose_handover` (primary) requires the asset owner; `submit_return_evidence`
+requires the current custodian; `add_baseline_evidence`/`begin_custody`/
+`mark_custody_gap`/`evaluate_return`/`close_handover` require a party to
+that handover (`from_party` or `to_party`); `challenge_finding`/
+`submit_repair`/`verify_repair` require a party to the defect's
+originating custody interval (`_require_defect_party`). Full
+stranger/owner/custodian matrix:
+`tests/direct/test_handover_authorization.py`.
+
 **Collusion between a dishonest leader and a dishonest evidence host.**
 Even if the evidence host serves whatever a colluding leader wants, the
 independent validator re-fetches from the *same pointer* and
@@ -52,9 +68,13 @@ evidence item for downstream tamper-evidence tooling; this release does
 not itself re-verify `content_hash` against live fetched content (see
 Limitations).
 
-**Wrong-asset evidence.** Evidence is always submitted against a specific
-`handover_id`/`component_ids`, scoped to one asset; nothing lets evidence
-submitted for asset A be attributed to asset B.
+**Wrong-asset/wrong-scope evidence.** Evidence is always submitted
+against a specific `handover_id`/`component_ids`, scoped to one asset;
+nothing lets evidence submitted for asset A be attributed to asset B.
+`_add_evidence` additionally validates every submitted `component_id`
+against the asset's known components *and* the specific handover's scope
+(found missing during post-build review — previously a caller could tag
+evidence with an arbitrary or out-of-scope component id).
 
 **Timestamp misrepresentation.** `claimed_capture_time`-style off-chain
 timestamps are not part of this release's evidence schema; only
@@ -89,6 +109,22 @@ frozen policy's `evidence_minimums` is enforced deterministically in
 an insufficient tier downgrades the outcome to `INCONCLUSIVE` rather than
 recording the defect (`tests/direct/test_handover_evidence_assurance.py`).
 Missing policy coverage for a severity fails closed the same way.
+`_evidence_meets_minimum` checks specifically the tier of the evidence
+item that was actually classified (index 0, the one `_classify_component`
+fetches) — not "any evidence item submitted for this component" — so a
+caller cannot attach a weak item the model actually reads plus an
+unrelated strong-tier item nobody fetched and have the strong tier alone
+satisfy the policy (found and fixed during post-build review).
+
+**Self-certified assurance tier.** A caller asserting `SIGNED_INSPECTION`
+or another strong tier for a plain `WEB_RENDERED_INSPECTION`/arbitrary
+evidence_kind is rejected at submission (`_tier_allowed_for_kind`): the
+stronger tiers can only be claimed for an `evidence_kind` that could
+plausibly carry that property (e.g. `SIGNED_INSPECTION` only for
+`evidence_kind=SIGNED_INSPECTION_RECORD`). This does not cryptographically
+prove the claim — nothing on-chain can — but it closes the trivial hole
+where any caller labels anything with the strongest available tier
+regardless of what it actually is.
 
 **Visual overclaim.** This release makes no image/vision verification
 claim (HP17); see `docs/EVIDENCE.md`.

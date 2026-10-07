@@ -2,29 +2,86 @@
 
 ## Status: deployed to Studionet, full live lifecycle proven (Gates 1-3)
 
-**Canonical contract address:** `0x785503f0aB50C458813AdEE36B43937Ebb884077`
-**Deployment transaction:** `0xa6a928f625cc3349f404972e40ca1a0920f81683f65a85aa0ecae4b271991a3b`
+**Canonical contract address:** `0x4b4D04B5268cC7e20ea6970947Cf2f9b29B0aB92`
+**Deployment transaction:** `0x18f58fa2b59cfc45fc1d6c628e45aa577d882de63d3a1bde1d1720254d749df6`
 **Network:** Genlayer Studio Network (`studionet`, chainId `61999`)
-**Explorer (contract page, verified live — 17 real transactions):**
-https://explorer-studio.genlayer.com/address/0x785503f0aB50C458813AdEE36B43937Ebb884077
+**Explorer (contract page):**
+https://explorer-studio.genlayer.com/address/0x4b4D04B5268cC7e20ea6970947Cf2f9b29B0aB92
 **Deployer account:** `0xaffE15eEc45b68835cc9E5B4Ab85dD5deaE8e70b`
 (`my-studionet-wallet`)
 
 Verified independently, not just the CLI's own echo:
 
 - `genlayer receipt <tx>` → `status_name: 'FINALIZED'`, leader result
-  `{ status: 'return', payload: null }` (3/5 validators AGREE, majority).
+  `{ status: 'return', payload: null }` (5/5 validators AGREE).
 - `genlayer schema <address>` → 27 methods with the full expected ABI.
 - `python scripts/source_parity.py` → `PASS`: byte-for-byte identical to
   `contracts/handover_protocol.py` in this working tree.
+- `tests/integration/test_handover_studionet.py` → 3/3 passed, real
+  network reads against this exact address (see "Automated integration
+  checks" below).
 
-This is the **third** deployment, superseding
-`0xD16141830b78A71b6F594d90fa4E1a6eF717DE85` (which fixed the
-`_fetch_text` HTTP-status bug below, but predates the evidence-assurance
-and real-challenge wiring), which itself superseded
-`0x796bfBD33C7fFD8330F8ff6cCD46681B7E938ACe` (which predates the
-HTTP-status fix), which itself superseded a first attempt that failed
-outright over a bad dependency pin. No earlier address is canonical.
+This is the **fourth** deployment, superseding
+`0x785503f0aB50C458813AdEE36B43937Ebb884077` (predates the
+authorization/evidence-integrity fixes from the external security review
+below), which superseded `0xD16141830b78A71b6F594d90fa4E1a6eF717DE85`
+(fixed the `_fetch_text` HTTP-status bug, predates evidence-assurance and
+real-challenge wiring), which superseded
+`0x796bfBD33C7fFD8330F8ff6cCD46681B7E938ACe` (predates the HTTP-status
+fix), which superseded a first attempt that failed outright over a bad
+dependency pin. No earlier address is canonical.
+
+## Security review fixes, proven live (not just in Direct Mode)
+
+An external review of the previous canonical deployment found that most
+public write methods had no caller authorization at all, and two gaps in
+how evidence assurance was bound to what was actually classified. Fixed
+in `contracts/handover_protocol.py`, covered by
+`tests/direct/test_handover_authorization.py` (12 stranger/owner/
+custodian/receiver tests), and proven live against this deployment:
+
+- **`propose_handover` (primary) now requires the asset owner.**
+  Live: `offset-bob` (not the owner) attempting
+  `propose_handover(A1, ..., parent_handover_id="")` on asset A1 reverted
+  with `Exception: only the asset owner may propose primary custody`
+  (confirmed via the transaction's `stderr` traceback, not just a status
+  code). The owner's identical call succeeded, creating `H1`.
+- **`_add_evidence` now rejects an assurance tier the `evidence_kind`
+  can't plausibly support.** Live: `add_baseline_evidence(H1,
+  WEB_RENDERED_INSPECTION, ..., assurance_tier=SIGNED_INSPECTION)`
+  reverted with `Exception: assurance tier SIGNED_INSPECTION is not
+  claimable for evidence kind WEB_RENDERED_INSPECTION`.
+- **`submit_return_evidence` now requires the current custodian**;
+  **`add_baseline_evidence`/`begin_custody`/`mark_custody_gap`/
+  `evaluate_return`/`close_handover` now require a party to the
+  handover**; **`challenge_finding`/`submit_repair`/`verify_repair` now
+  require a party to the defect's originating custody interval.** All
+  proven in Direct Mode (`test_handover_authorization.py`); the primary-
+  proposal and tier/kind checks above were additionally proven live since
+  they are the two most severe (any address could otherwise originate
+  custody of someone else's asset).
+- **`_evidence_meets_minimum` now checks only the evidence item actually
+  classified** (index 0, what `_classify_component` fetches), not "any
+  evidence item submitted for the component" — closing a gap where a weak
+  item that's actually read could be paired with an unrelated strong-tier
+  item nobody fetched.
+- **`_add_evidence` now validates `component_ids` against the asset's
+  known components and the handover's scope.**
+- **`content_hash` is explicitly documented, in the `Evidence` dataclass
+  itself, as caller-asserted and not cryptographically verified** — the
+  reviewer's explicitly offered alternative to full verification, chosen
+  over mechanically rewriting ~40 Direct Mode test fixtures to carry real
+  sha256 digests for marginal additional assurance.
+
+## Automated integration checks (replaces the previous unconditional skip)
+
+`tests/integration/test_handover_studionet.py` now runs real
+`genlayer_py.read_contract` calls against the canonical address above,
+using a freshly generated, **never-signing, unfunded** keypair purely to
+populate the required `from` field — no real private key is used or
+needed, so the test runs from any machine with network access and no
+secrets configured. It asserts on asset `A1` and handover `H1`'s exact
+recorded state from the authorization smoke-test above. 3/3 pass.
 
 ## Live handover lifecycle proof (section 31 of the master spec)
 
@@ -96,7 +153,9 @@ handled every one of those disagreements correctly.
 below for what this run caught.
 
 ### Evidence-assurance-tier enforcement — asset A1 / handovers H1, H2
-(on the current canonical deployment)
+(on the third deployment, `0x785503f0aB50C458813AdEE36B43937Ebb884077`,
+since superseded — the enforcement logic itself is unchanged in the
+current canonical deployment, re-confirmed by the Direct Mode suite)
 
 Proves `_evidence_meets_minimum` (section 10) is genuinely load-bearing
 on-chain, not just in Direct Mode:
@@ -114,7 +173,7 @@ on-chain, not just in Direct Mode:
    `assurance_tier: SIGNED_INSPECTION`. `evaluate_return(H2)` →
    `DEFECTS_RECORDED`, defect `D1` created with `severity: MAJOR`.
 
-### Real challenge re-evaluation — defect D1
+### Real challenge re-evaluation — defect D1 (also on the third deployment)
 
 `_classify_challenge` used to be a conservative placeholder that always
 returned `UPHELD`. It now independently retrieves fresh challenge
@@ -164,11 +223,13 @@ private key ever printed).
 
 - GenVM lint beyond "schema loads against a live deployment" — no deeper
   static-analysis subcommand was discoverable in this CLI version.
-- `tests/integration/test_handover_studionet.py` is still an explicit
-  skip — the live lifecycle above was driven by hand via
-  `scripts/gl_write.js`/`genlayer call`/`genlayer receipt`, documented
-  step-by-step here, rather than by a single automated integration test
-  targeting the canonical address.
+- `content_hash` is not cryptographically verified against fetched bytes
+  (explicitly redesigned/labeled instead — see "Security review fixes"
+  above and `docs/SECURITY.md` → Limitations).
+- `tests/integration/test_handover_studionet.py` covers read-only state
+  checks, not a fully automated end-to-end *write* lifecycle (register →
+  evaluate → repair → challenge) against the canonical address — that
+  still requires a funded signer and is documented by hand above instead.
 
 ## Canonical vs. disposable
 

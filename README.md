@@ -107,6 +107,18 @@ enforcement, all numeric bounds, defect lifecycle transitions, checkpoint/
 digest assembly, and certificate field computation. See
 `docs/INVARIANTS.md` (18 named invariants, each covered by a test).
 
+## Authorization
+
+Every write method that mutates handover or defect state requires the
+caller to be an actual party to it: the asset owner for a primary
+`propose_handover`, the current custodian for `submit_return_evidence`,
+a party to the handover for `add_baseline_evidence`/`begin_custody`/
+`mark_custody_gap`/`evaluate_return`/`close_handover`, and a party to the
+defect's originating custody interval for `challenge_finding`/
+`submit_repair`/`verify_repair`. Proven with a stranger/owner/custodian
+matrix in `tests/direct/test_handover_authorization.py` and live on
+Studionet (see `docs/DEPLOYMENT.md` → "Security review fixes").
+
 ## Equivalence / validator design
 
 See `docs/CONSENSUS.md`. Proven directly with eight forged-leader
@@ -144,13 +156,13 @@ lifecycle (baseline → custody → real consensus → condition delta → defec
 → repair → certificate, plus a genuine validator-disagreement case and a
 genuine negative/fail-closed case).
 
-**Direct Mode: 55/55 tests passing.** See
+**Direct Mode: 67/67 tests passing; integration: 3/3 real network reads
+against the canonical deployment (70/70 total).** See
 `docs/RELEASE_CANDIDATE_VERIFICATION.md` for the exact command, counts,
 versions, and an honest list of what is still *not* run (a standalone
 GenVM static lint pass beyond "schema loads against the live
-deployment"; `tests/integration/test_handover_studionet.py` is still an
-explicit skip since the live lifecycle was driven by hand rather than by
-a single automated script — see `docs/DEPLOYMENT.md`).
+deployment"; `content_hash` is documented, not cryptographically
+verified — see `docs/DEPLOYMENT.md`).
 
 ```bash
 py -3.12 -m venv .venv-test
@@ -164,6 +176,6 @@ pytest tests/direct/ -v
 1. Read `DECISION.md` (why this primitive, why GenLayer, differentiation).
 2. Read `docs/INVARIANTS.md` (18 invariants; grep test files for the `HP`
    tag referenced in each test's docstring/comment).
-3. Run `pytest tests/direct/ -v` (55 tests, no network/deployment needed).
+3. Run `pytest tests/direct/ -v` (67 tests, no network/deployment needed).
 4. Read `docs/CONSENSUS.md` and `tests/direct/test_handover_consensus.py`
    for the forged-leader proof.

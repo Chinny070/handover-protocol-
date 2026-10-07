@@ -62,16 +62,17 @@ throughout `contracts/handover_protocol.py`:
   confirmed by successfully deploying and exercising
   `contracts/handover_protocol.py` under `gltest.direct`.
 
-## Direct Mode: green
+## Direct Mode + integration: green
 
 ```text
-collected: 56
-passed: 55
+collected: 70
+passed: 70
 failed: 0
-skipped: 1
-duration: ~9-42s (full suite, warm SDK cache; variance is network/SDK-cache related, not flakiness)
+skipped: 0
+duration: ~30-50s (full suite, includes 3 real Studionet network reads)
 Python: 3.12.10
 genlayer-test: 0.29.2
+genlayer-py: 0.16.3
 command: pytest tests/ -v
 ```
 
@@ -111,8 +112,17 @@ Breakdown by file:
   on SIGNED_INSPECTION evidence is accepted, unknown assurance tier
   rejected at submission, missing policy coverage for a severity fails
   closed).
-- `tests/integration/test_handover_studionet.py` — 1 skipped (explicit
-  stub; the live lifecycle was driven by hand instead — see
+- `test_handover_authorization.py` — 12 passed (stranger/owner/custodian
+  matrix for every write method found unauthorized during the external
+  security review: primary-proposal owner check, delegation custodian
+  check, baseline/return evidence party checks, begin_custody/
+  mark_custody_gap/evaluate_return/close_handover party checks,
+  challenge/repair/verify_repair defect-party checks, and
+  previously-untested cancel_handover coverage).
+- `tests/integration/test_handover_studionet.py` — 3 passed (real
+  `genlayer_py.read_contract` calls against the canonical Studionet
+  deployment, using a freshly generated never-signing keypair; asserts
+  on asset A1 / handover H1's exact recorded live state — see
   docs/DEPLOYMENT.md).
 
 ## Pickling validation: green
@@ -157,14 +167,19 @@ assumed from a CLI success message.
 - GenVM AST lint / full static schema validation beyond "schema loads
   against the live deployment": no standalone static-lint subcommand was
   discoverable in this `genlayer` CLI version (0.39.2).
-- `scripts/live_verify.py` remains an honest stub; the live lifecycle
-  above was driven by hand via `scripts/gl_write.js` and the `genlayer`
-  CLI's `call`/`receipt` commands, documented step-by-step in
-  `docs/DEPLOYMENT.md`, rather than by a single automated script.
-- `tests/integration/test_handover_studionet.py` is still an explicit
-  skip — it would need to be rewritten to target the specific canonical
-  address rather than deploying its own throwaway instance, which is a
-  reasonable next task but wasn't done here.
+- `scripts/live_verify.py` remains an honest stub; the live lifecycles
+  documented in `docs/DEPLOYMENT.md` were driven by hand via
+  `scripts/gl_write.js` and the `genlayer` CLI's `call`/`receipt`
+  commands, not by a single automated write-driving script.
+  `tests/integration/test_handover_studionet.py` now runs for real
+  (3/3 passed, no skip), but only covers read-only state checks against
+  the canonical deployment, not a fully automated end-to-end write
+  lifecycle — that still needs a funded signer.
+- `content_hash` is not cryptographically verified against fetched
+  evidence bytes — explicitly documented as caller-asserted only (see
+  `docs/DEPLOYMENT.md` → "Security review fixes" and
+  `docs/SECURITY.md` → Limitations), chosen over mechanically rewriting
+  ~40 Direct Mode test fixtures for marginal additional assurance.
 
 ## Visual/image claims
 

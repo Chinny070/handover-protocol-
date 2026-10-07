@@ -13,7 +13,10 @@ from gltest.direct import create_address
 from _helpers import make_sealed_asset, renter_address, finding
 
 
-def _handover_through_return(c, vm, aid, cid, custodian, web_body, llm_json, assurance_tier, url="https://example.com/inspect"):
+def _handover_through_return(
+    c, vm, aid, cid, custodian, web_body, llm_json, assurance_tier,
+    url="https://example.com/inspect", evidence_kind="WEB_RENDERED_INSPECTION",
+):
     hid = c.propose_handover(asset_id=aid, to_party=custodian.as_hex, scope_component_ids=[cid])
     vm.sender = custodian
     c.accept_baseline(handover_id=hid)
@@ -22,7 +25,7 @@ def _handover_through_return(c, vm, aid, cid, custodian, web_body, llm_json, ass
     vm.mock_llm(".*", llm_json)
     c.submit_return_evidence(
         handover_id=hid,
-        evidence_kind="WEB_RENDERED_INSPECTION",
+        evidence_kind=evidence_kind,
         source_url=url,
         content_hash="h",
         component_ids=[cid],
@@ -78,6 +81,7 @@ def test_critical_finding_on_signed_inspection_evidence_is_accepted(direct_vm):
             evidence_sufficient=True,
         ),
         assurance_tier="SIGNED_INSPECTION",
+        evidence_kind="SIGNED_INSPECTION_RECORD",
     )
     assert status == "DEFECTS_RECORDED"
 
@@ -140,5 +144,6 @@ def test_missing_policy_coverage_for_severity_fails_closed(direct_vm):
             attribution_class="SUPPORTED_AS_NEW_IN_INTERVAL",
         ),
         assurance_tier="SIGNED_INSPECTION",
+        evidence_kind="SIGNED_INSPECTION_RECORD",
     )
     assert status == "INCONCLUSIVE"
