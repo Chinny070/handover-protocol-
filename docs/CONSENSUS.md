@@ -4,11 +4,12 @@
 
 | Call site | API | Purpose |
 |---|---|---|
-| `_fetch_text` | `gl.nondet.web.get(url)` | retrieve evidence text, typed failure instead of exception |
+| `_fetch_text` | `gl.nondet.web.get(url)` | retrieve evidence text; typed failure (including non-2xx HTTP status) instead of exception or false success |
 | `_classify_component` | `gl.nondet.exec_prompt(prompt, response_format="json")` | classify one component's condition/defect-relation/severity/attribution |
 | `_classify_repair` | `gl.nondet.exec_prompt(prompt, response_format="json")` | classify whether a repair receipt resolves a defect |
+| `_classify_challenge` | `gl.nondet.exec_prompt(prompt, response_format="json")` | reconsider a recorded finding against fresh challenge evidence |
 
-All three are invoked identically from both the leader closure and the
+All four are invoked identically from both the leader closure and the
 validator closure passed to `gl.vm.run_nondet_unsafe(leader_fn,
 validator_fn)` (verified against the installed `genlayer-py-std` v0.2.16
 runtime — see `docs/RELEASE_CANDIDATE_VERIFICATION.md`).
@@ -80,11 +81,19 @@ rejection for:
   is present (the validator's honest answer is `CUSTODY_GAP`);
 - matching every critical field honestly but pointing `matched_defect_id`
   at a different, still-valid candidate defect for the same component
-  (`test_forged_leader_matches_wrong_candidate_defect_is_rejected`).
+  (`test_forged_leader_matches_wrong_candidate_defect_is_rejected`);
+- claiming a challenge is `OVERTURNED` when the validator's own
+  independent re-fetch of the same challenge evidence fails
+  (`test_forged_leader_claims_overturned_when_evidence_is_unreachable_is_rejected`
+  — the challenge consensus path has its own leader/validator round in
+  `challenge_finding`, not just the condition-classification path).
 
 A final test (`test_honest_leader_result_is_accepted`) proves the validator
 is not merely rejecting everything — an honest, matching leader result is
-accepted.
+accepted. This also holds live: the Studionet proof in
+`docs/DEPLOYMENT.md` recorded several genuinely successful consensus
+rounds (`DEFECTS_RECORDED`, `REPAIRED`, `OVERTURNED`) as well as a
+genuine disagreement (`UNDETERMINED`).
 
 ## Failure semantics
 
@@ -101,7 +110,8 @@ accepted.
 
 ## Why consensus is load-bearing
 
-Delete `gl.vm.run_nondet_unsafe`/`gl.nondet.*` from `_classify_component`
-and `_classify_repair`, and the contract can no longer determine condition
-change, defect relation, or repair resolution from evidence text at all —
-see `DECISION.md` → "The delete-GenLayer test".
+Delete `gl.vm.run_nondet_unsafe`/`gl.nondet.*` from `_classify_component`,
+`_classify_repair`, and `_classify_challenge`, and the contract can no
+longer determine condition change, defect relation, repair resolution, or
+challenge reconsideration from evidence text at all — see `DECISION.md`
+→ "The delete-GenLayer test".
