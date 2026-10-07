@@ -1120,11 +1120,23 @@ class HandoverProtocol(gl.Contract):
 
 def _fetch_text(url: str) -> tuple:
     """Returns (ok, text). Never raises; failures are typed, not exceptions,
-    so render/parse failure can never masquerade as a damage finding (HP14)."""
+    so render/parse failure can never masquerade as a damage finding (HP14).
+
+    A non-2xx HTTP status (e.g. a 404 page body) is treated as a fetch
+    failure deterministically, by status code -- not left for the model to
+    notice from the response body's text. Relying on the model to
+    recognize an error page is not a deterministic guarantee (confirmed
+    live on Studionet: a 404 response was correctly classified as
+    UNAVAILABLE only because the model happened to recognize GitHub's 404
+    HTML page; this check makes that outcome guaranteed rather than
+    incidental)."""
     if not url:
         return False, ""
     try:
         resp = gl.nondet.web.get(url)
+        status = getattr(resp, "status", None)
+        if status is not None and not (200 <= int(status) < 300):
+            return False, ""
         body = resp.body or b""
         text = body.decode("utf-8", errors="replace")
         return True, text[:MAX_SOURCE_TEXT_CHARS]

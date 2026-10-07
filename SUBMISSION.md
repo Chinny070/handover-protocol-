@@ -25,7 +25,7 @@ condition certificates for downstream contracts.
   Certificate.
 - 18 named invariants (`docs/INVARIANTS.md`), each covered by at least one
   Direct Mode test.
-- **47/47 Direct Mode tests passing** (`docs/RELEASE_CANDIDATE_VERIFICATION.md`),
+- **48/48 Direct Mode tests passing** (`docs/RELEASE_CANDIDATE_VERIFICATION.md`),
   including 6 forged-leader rejection cases and 15 adversarial
   output-hardening cases.
 - A substantive custom validator (`gl.vm.run_nondet_unsafe`), not

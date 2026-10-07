@@ -1,86 +1,145 @@
 # DEPLOYMENT.md
 
-## Status: deployed to Studionet (Gate 1 proof)
+## Status: deployed to Studionet, full live lifecycle proven (Gates 1-3)
 
-**Canonical contract address:** `0x796bfBD33C7fFD8330F8ff6cCD46681B7E938ACe`
-**Deployment transaction:** `0x491be3b3d45bf875e3c968e6eec273362125652650386c9733cba48f6f14a2b1`
+**Canonical contract address:** `0xD16141830b78A71b6F594d90fa4E1a6eF717DE85`
+**Deployment transaction:** `0xdb4bd58b179a6614f3d55b261a1f10355ac52534485cbdf1cc854492c162def4`
 **Network:** Genlayer Studio Network (`studionet`, chainId `61999`)
 **Explorer:** https://genlayer-explorer.vercel.app (search the tx hash or
 address above)
 **Deployer account:** `0xaffE15eEc45b68835cc9E5B4Ab85dD5deaE8e70b`
 (`my-studionet-wallet`)
 
-Verified independently (not just the CLI's own "deployed successfully"
-message — see the first attempt below for why that distinction matters):
+Verified independently, not just the CLI's own echo:
 
-- `genlayer receipt <tx>` → `status_name: 'FINALIZED'`,
-  `result_name: 'MAJORITY_AGREE'`, leader result
-  `{ status: 'return', payload: null }` (i.e. `__init__` actually returned
-  successfully, not merely that consensus finalized on *some* outcome).
-- `genlayer schema <address>` → returns the full expected ABI (all public
-  write/view methods with correct param/return types).
-- `python scripts/source_parity.py` → `PASS`: the deployed source is
-  byte-for-byte identical to `contracts/handover_protocol.py` in this
-  working tree (verified via `genlayer code <address>`, not assumed).
+- `genlayer receipt <tx>` → `status_name: 'FINALIZED'`, leader result
+  `{ status: 'return', payload: null }` (5/5 validators AGREE).
+- `genlayer schema <address>` → 27 methods with the full expected ABI.
+- `python scripts/source_parity.py` → `PASS`: byte-for-byte identical to
+  `contracts/handover_protocol.py` in this working tree.
 
-## A real failure, caught and fixed before trusting the deploy
+This is the **second** deployment. The first
+(`0x796bfBD33C7fFD8330F8ff6cCD46681B7E938ACe`, tx
+`0x491be3b3d45bf875e3c968e6eec273362125652650386c9733cba48f6f14a2b1`) was
+superseded after the live lifecycle run below surfaced a real bug in
+`_fetch_text` (see "Bugs found during live verification"). That first
+deployment itself superseded an even earlier one that failed outright
+over a bad dependency pin. Neither earlier address is canonical.
 
-The first deployment attempt used `# { "Depends": "py-genlayer:latest" }`
-as the dependency header (copied from the spec's example syntax). The CLI
-printed `✔ Contract deployed successfully` and the receipt showed
-`status_name: 'FINALIZED'` / `result_name: 'MAJORITY_AGREE'` — which on
-their own look like success. Per this repo's own "never fabricate
-verification" rule, that claim was checked anyway:
+## Live handover lifecycle proof (section 31 of the master spec)
 
-- `genlayer code <address>` and `genlayer schema <address>` both returned
-  `Contract <address> not found`.
-- The full receipt's `leader_receipt[].result` was
-  `{ status: 'contract_error', payload: 'invalid_contract' }` — the
-  validators had reached majority agreement that deployment **failed**,
-  not that it succeeded. `MAJORITY_AGREE`/`FINALIZED` describe consensus
-  on an outcome, not which outcome.
+All of the following are real Studionet transactions against the
+canonical address above, run via `scripts/gl_write.js` (see below for why
+the plain CLI couldn't be used for every call) and verified via
+`genlayer receipt`/`genlayer call`, not assumed from a CLI success
+message.
 
-Root cause: `"latest"` is not a deterministically resolvable dependency
-pin on Studionet's live GenVM. Comparing against a previously-successful
-sibling project's contract header
-(`C:\Users\USERpc\continuum\contracts\continuum_protocol.py`) showed the
-correct form pins an exact content hash. The locally cached Direct-Mode
-runtime (`~/.cache/gltest-direct/extracted/v0.2.16/py-genlayer/`) uses the
-identical hash, confirming it's the right pin for this environment's
-v0.2.16 runtime:
+### Positive path — asset A3 / handover H2 (single component, for a clean
+run; a two-component run on asset A2/H1 hit genuine validator
+disagreement, documented below)
 
-```python
-# v0.2.16
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
-```
+| Step | Call | Result |
+|---|---|---|
+| Register | `register_asset("Fleet Van 7 Single")` | `A3` |
+| Component | `add_component(A3, "", "front_bumper")` | `C4` |
+| Freeze policy | `seal_asset_definition(A3, {...})` | `policy_hash` recorded |
+| Propose | `propose_handover(A3, offset-bob, [C4])` | `H2` |
+| Baseline evidence | `add_baseline_evidence` → `fixtures/vehicle_baseline_bumper.txt` | accepted |
+| Accept | `accept_baseline(H2)` (signed by offset-bob, the receiving party) | `ACCEPTED` |
+| Begin custody | `begin_custody(H2)` | `ACTIVE` |
+| Return evidence | `submit_return_evidence` → `fixtures/vehicle_return_bumper_damaged.txt` | `RETURN_PENDING` |
+| **Evaluate (real consensus)** | `evaluate_return(H2)` | 3 AGREE / 2 DISAGREE → `MAJORITY_AGREE`, `DEFECTS_RECORDED` |
+| Condition delta | `get_defect(D1)` | `severity: MAJOR`, `status: OPEN` |
+| Attribution | defect history | `origin_class: SUPPORTED_AS_NEW_IN_INTERVAL` — not "caused by" |
+| Certificate | `get_condition_certificate(A3)` | `major_defect_count: 1`, real `condition_digest`/`consensus_digest` hashes |
+| Repair claim | `submit_repair(D1, REPAIR_RECEIPT, ...)` → `fixtures/vehicle_repair_receipt_bumper.txt` | `REPAIR_CLAIMED` |
+| **Verify repair (real consensus)** | `verify_repair(D1)` | `REPAIRED` |
+| Certificate again | `get_condition_certificate(A3)` | `major_defect_count: 0`, `open_defect_count: 0` |
+| Challenge | `challenge_finding(D1, WRONG_SEVERITY)` | `UPHELD` (see Limitations — `_classify_challenge` is a placeholder) |
+| Close | `close_handover(H2)` | `CLOSED` |
+| Clear check | `is_handover_clear(A3)` | `true` |
 
-`contracts/handover_protocol.py` was corrected to this pin, the Direct
-Mode suite was re-run (47/47 still green), and the corrected contract was
-redeployed — producing the canonical address/tx above, this time verified
-`FOUND` and schema/source-parity green.
+### Genuine validator disagreement — asset A2 / handover H1 (two
+components, `C1` front_bumper + `C3` engine)
 
-The disposable first deployment (`0x8620488e78b6E9FF4E7f583C7611c162C28A59f1`,
-tx `0x649ab65790a719858463ac3f65d088e6f0b996ede2ca07c93879dcc999f2693a`)
-is **not** canonical and must not be referenced from README/SUBMISSION.
+`evaluate_return(H1)` was called three times. The first two attempts
+produced `status_name: UNDETERMINED` (3 DISAGREE/1 AGREE/1 IDLE, then
+3 DISAGREE/1 AGREE/1 IDLE again, 4 rounds, rotations exhausted) — the
+five validators' different underlying models (a mix of
+`anthropic/claude-sonnet-4.6`, `openai/gpt-5.4`,
+`google/gemini-3-flash-preview` behind an internal router/policy) did not
+reach exact agreement on every typed critical field across *two*
+components simultaneously. Crucially: **no defect was created and no
+state changed** on either UNDETERMINED result — `get_handover(H1)`
+confirmed it stayed `RETURN_PENDING` both times, confirming HP18
+("protocol disagreement != finalized contract-level result") held under
+genuine adversarial-by-nature conditions, not a constructed test. A third
+attempt after sharpening the return-evidence fixture's wording also came
+back `UNDETERMINED` (3 DISAGREE/2 IDLE that time). H1 was left as-is
+(`RETURN_PENDING`) as an honest record of this; the positive proof above
+used a separate, single-component asset to reduce the joint-agreement
+surface.
+
+This is real, useful evidence for `docs/CONSENSUS.md` and
+`docs/SECURITY.md`, not a shortcoming to hide: exact-match consensus
+across multiple cross-model-graded components is measurably harder to
+agree on than a single component, and the contract's fail-closed design
+handled every one of those disagreements correctly.
+
+### Negative / fail-closed case — asset A4 / handover H3
+
+`submit_return_evidence` pointed at
+`https://raw.githubusercontent.com/Chinny070/handover-protocol-/main/fixtures/does_not_exist.txt`
+— confirmed with `curl` to return a genuine `404` before use.
+`evaluate_return(H3)` → `EVIDENCE_UNAVAILABLE` (confirmed via
+`genlayer call get_handover`). See "Bugs found during live verification"
+below for what this run caught.
+
+## Bugs found during live verification (fixed, not hidden)
+
+**1. `_fetch_text` didn't check HTTP status (contract bug, fixed).**
+The negative case above passed, but only because the model happened to
+recognize GitHub's 404 HTML page as "evidence unavailable" when asked to
+classify it — `_fetch_text` decoded and returned the body as successful
+(`ok=True`) regardless of `resp.status`. That is not a deterministic
+guarantee (HP14 requires render failure to be separated from a damage
+finding by code, not by hoping the model notices). Fixed by checking
+`resp.status` and treating any non-2xx response as a fetch failure
+deterministically, with a new Direct Mode regression test
+(`test_evaluate_return_http_404_is_deterministically_unavailable` in
+`tests/direct/test_handover_protocol.py`) that registers no LLM mock at
+all, so it would fail loudly (not just assert the wrong status) if the
+fix regressed. 48/48 Direct Mode tests pass with the fix; the contract
+was redeployed (see canonical address above) after this fix landed.
+
+**2. `genlayer write --args` CLI bugs (environment/tooling, not a
+contract bug).** `genlayer` CLI 0.39.2's `--args` parser:
+- Silently coerces any argument whose text is valid JSON for an
+  object/array into a dict/array type, even when the ABI expects a plain
+  string (`seal_asset_definition`'s `policy_json` hit this).
+- Coerces an empty string argument `""` into the number `0`
+  (`Number("") === 0` in JS), breaking `add_component`'s legitimately-empty
+  `parent_id` for a root-category component.
+
+Both failures manifest as a clean `contract_error: exit_code 1` with no
+state change — safe, but easy to misdiagnose as a contract bug. Worked
+around with `scripts/gl_write.js`, which calls `genlayer-js` directly
+with exact argument types, reusing the CLI's own keytar-cached signer (no
+private key ever printed).
 
 ## What's still outstanding
 
-- **Live handover lifecycle proof** (section 31 of the master spec):
-  register asset → components → frozen policy → baseline propose/accept →
-  begin custody → return evidence → real validator consensus → typed
-  condition delta → defect lineage case → read the Condition Certificate →
-  at least one negative/fail-closed case. Not yet run against this
-  deployment — see `scripts/live_verify.py` (stub) and
-  `tests/integration/test_handover_studionet.py` (skipped).
-- **GenVM lint/schema validation** beyond "schema loads": no deeper
-  static-analysis subcommand was discoverable in this `genlayer` CLI
-  version; `schema` loading successfully against the live deployment is
-  the strongest check available.
-- Evidence-assurance-tier enforcement and `_classify_challenge` wiring —
-  see `docs/SECURITY.md` → Limitations.
+- `_classify_challenge` is a conservative placeholder (documented in
+  `docs/DEFECT_LINEAGE.md`/`docs/SECURITY.md`), confirmed live: the
+  challenge call above returned `UPHELD` regardless of fresh evidence,
+  as expected for the current implementation.
+- Evidence-assurance-tier enforcement against submitted evidence is not
+  yet wired in (separate tracked follow-up).
+- GenVM lint beyond "schema loads against a live deployment" — no deeper
+  static-analysis subcommand was discoverable in this CLI version.
 
 ## Canonical vs. disposable
 
 Only the address/tx recorded at the top of this file is canonical.
-Anything deployed while iterating (including the first, failed attempt
-above) is disposable and must not be referenced from README/SUBMISSION.
+Everything else deployed while iterating (both earlier addresses in this
+document) is disposable and must not be referenced from README/SUBMISSION.

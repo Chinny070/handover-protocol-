@@ -242,6 +242,42 @@ def test_evaluate_return_evidence_unavailable(direct_vm):
     assert status == "EVIDENCE_UNAVAILABLE"
 
 
+def test_evaluate_return_http_404_is_deterministically_unavailable(direct_vm):
+    """A non-2xx HTTP status must be treated as a fetch failure by status
+    code alone (HP14), not left for the model to notice from the response
+    body text. No LLM mock is registered: if the contract tried to feed a
+    404 body to the model instead of failing closed first, this test would
+    hang/error on an unmocked LLM call, not just assert the wrong status.
+
+    Found live on Studionet: the original implementation didn't check
+    resp.status, decoded whatever body came back, and relied on the model
+    recognizing GitHub's 404 HTML page as "evidence unavailable" -- which
+    happened to work, but was never a guarantee."""
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    renter = create_address("renter")
+    cid = comps["bumper"]
+    hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
+    direct_vm.sender = renter
+    c.accept_baseline(handover_id=hid)
+    c.begin_custody(handover_id=hid)
+
+    direct_vm.mock_web(
+        "example.com/missing",
+        {"status": 404, "body": "<html><body>404: Not Found</body></html>"},
+    )
+    c.submit_return_evidence(
+        handover_id=hid,
+        evidence_kind="WEB_RENDERED_INSPECTION",
+        source_url="https://example.com/missing",
+        content_hash="h4",
+        component_ids=[cid],
+        assurance_tier="SELF_REPORTED",
+    )
+    status = c.evaluate_return(handover_id=hid)
+    assert status == "EVIDENCE_UNAVAILABLE"
+
+
 def test_close_handover_requires_terminal_state(direct_vm):
     owner = create_address("owner")
     c, aid, comps = make_sealed_asset(direct_vm, owner)

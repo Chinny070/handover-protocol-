@@ -53,11 +53,11 @@ throughout `contracts/handover_protocol.py`:
 ## Direct Mode: green
 
 ```text
-collected: 47
-passed: 47
+collected: 48
+passed: 48
 failed: 0
 skipped: 0
-duration: ~13-15s (full suite, warm SDK cache)
+duration: ~8-15s (full suite, warm SDK cache)
 Python: 3.12.10
 genlayer-test: 0.29.2
 command: pytest tests/direct/ -v
@@ -65,11 +65,13 @@ command: pytest tests/direct/ -v
 
 Breakdown by file:
 
-- `test_handover_protocol.py` — 10 passed (registration, component graph
+- `test_handover_protocol.py` — 11 passed (registration, component graph
   bounds/cycle rejection, seal/policy validation, baseline propose/accept/
   dispute/immutability, custody begin/overlap rejection, evaluate_return
-  terminal states RETURN_CLEAR/DEFECTS_RECORDED/EVIDENCE_UNAVAILABLE,
-  certificate basics, close_handover gating).
+  terminal states RETURN_CLEAR/DEFECTS_RECORDED/EVIDENCE_UNAVAILABLE
+  (including a deterministic-by-HTTP-status-code case added after the
+  live Studionet run surfaced the original implementation's gap — see
+  docs/DEPLOYMENT.md), certificate basics, close_handover gating).
 - `test_handover_custody.py` — 4 passed (delegation scope-subset
   enforcement, delegation depth bound, custody-gap recording and
   certificate reflection, unknown gap-state rejection).
@@ -104,20 +106,33 @@ on `win32` for the test session, rather than depending on whichever copy
 of `genlayer-test` happens to already carry a fix). Verified green both
 with and without a pre-patched `gltest` install.
 
-## What was NOT run (explicitly out of scope this session)
+## Studionet deployment and live lifecycle: now done
 
-- GenVM AST lint / full schema validation: the `genlayer` CLI's `schema`
-  subcommand operates on an already-deployed contract address against a
-  running node (localnet simulator or Studionet); no standalone
-  static-lint subcommand was discoverable. Running it would require
-  either `genlayer up` (local simulator) or a live Studionet deployment,
-  both out of this session's explicit scope.
-- Any Studionet deployment, GitHub push, PR, or issue creation — all
-  explicitly excluded from this session's task.
-- `tests/integration/test_handover_studionet.py` and
-  `scripts/{preflight,live_verify,source_parity}.py` are stubs (see
-  `docs/DEPLOYMENT.md`) pending a follow-on session that is allowed to
-  deploy.
+A follow-on session deployed the canonical contract to Studionet, caught
+and fixed a real bug this way (`_fetch_text` not checking HTTP status —
+see `docs/DEPLOYMENT.md`), and ran the full live handover lifecycle:
+baseline propose/accept, custody, real leader/validator consensus over
+public GitHub fixture evidence, a genuine condition-delta + defect +
+repair cycle, a genuine case of validator disagreement
+(`UNDETERMINED`, correctly not committed to state), and a genuine
+negative/fail-closed case (404 evidence → `EVIDENCE_UNAVAILABLE`). See
+`docs/DEPLOYMENT.md` for the full record with real addresses,
+transaction hashes, and vote tallies — nothing there is fabricated or
+assumed from a CLI success message.
+
+## What is still NOT run
+
+- GenVM AST lint / full static schema validation beyond "schema loads
+  against the live deployment": no standalone static-lint subcommand was
+  discoverable in this `genlayer` CLI version (0.39.2).
+- `scripts/live_verify.py` remains an honest stub; the live lifecycle
+  above was driven by hand via `scripts/gl_write.js` and the `genlayer`
+  CLI's `call`/`receipt` commands, documented step-by-step in
+  `docs/DEPLOYMENT.md`, rather than by a single automated script.
+- `tests/integration/test_handover_studionet.py` is still an explicit
+  skip — it would need to be rewritten to target the specific canonical
+  address rather than deploying its own throwaway instance, which is a
+  reasonable next task but wasn't done here.
 
 ## Visual/image claims
 

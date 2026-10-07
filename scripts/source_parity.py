@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 CONTRACT_PATH = Path(__file__).resolve().parents[1] / "contracts" / "handover_protocol.py"
-DEFAULT_ADDRESS = "0x796bfBD33C7fFD8330F8ff6cCD46681B7E938ACe"  # canonical Studionet deployment
+DEFAULT_ADDRESS = "0xD16141830b78A71b6F594d90fa4E1a6eF717DE85"  # canonical Studionet deployment
 
 
 def _extract_source(cli_output: str) -> str:
