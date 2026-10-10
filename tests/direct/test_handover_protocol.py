@@ -5,7 +5,58 @@ import json
 import pytest
 from gltest.direct import create_address
 
-from _helpers import deploy, make_sealed_asset, default_policy_json, finding
+from _helpers import deploy, make_sealed_asset, default_policy_json, finding, attach_test_baseline
+
+
+def test_unassessed_asset_never_gets_clear_certificate(direct_vm):
+    owner = create_address("owner")
+    c, aid, _ = make_sealed_asset(direct_vm, owner)
+    certificate = c.get_condition_certificate(asset_id=aid)
+    assert certificate["certificate_status"] == "PENDING_ASSESSMENT"
+    assert c.is_handover_clear(asset_id=aid) is False
+
+
+def test_baseline_acceptance_requires_each_component_and_digest(direct_vm):
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner, component_names=("bumper", "engine"))
+    receiver = create_address("receiver")
+    hid = c.propose_handover(
+        asset_id=aid, to_party=receiver.as_hex,
+        scope_component_ids=[comps["bumper"], comps["engine"]],
+    )
+    direct_vm.sender = receiver
+    with direct_vm.expect_revert("baseline evidence missing"):
+        c.accept_baseline(handover_id=hid)
+
+
+def test_changed_baseline_fails_return_assessment_closed(direct_vm):
+    import hashlib
+
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    receiver = create_address("receiver")
+    cid = comps["bumper"]
+    hid = c.propose_handover(asset_id=aid, to_party=receiver.as_hex, scope_component_ids=[cid])
+    direct_vm.sender = receiver
+    attach_test_baseline(c, direct_vm, hid)
+    c.accept_baseline(handover_id=hid)
+    c.begin_custody(handover_id=hid)
+
+    # The URL now serves different bytes from the digest frozen at acceptance.
+    direct_vm.clear_mocks()
+    direct_vm.mock_web(f"example.com/baseline/{hid}/{cid}", {"status": 200, "body": "silently edited baseline"})
+    return_body = "Return inspection: unchanged."
+    direct_vm.mock_web("example.com/return-final", {"status": 200, "body": return_body})
+    direct_vm.sender = receiver
+    c.submit_return_evidence(
+        handover_id=hid,
+        evidence_kind="WEB_RENDERED_INSPECTION",
+        source_url="https://example.com/return-final",
+        content_hash=hashlib.sha256(return_body.encode()).hexdigest(),
+        component_ids=[cid], assurance_tier="SELF_REPORTED",
+    )
+    assert c.evaluate_return(handover_id=hid) == "EVIDENCE_UNAVAILABLE"
+    assert c.get_condition_certificate(asset_id=aid)["certificate_status"] != "CLEAR"
 
 
 def test_register_and_component_graph_bounds(direct_vm):
@@ -71,15 +122,18 @@ def test_baseline_propose_accept_and_immutability(direct_vm):
 
     # wrong caller cannot accept
     with direct_vm.expect_revert("only the receiving party"):
+        attach_test_baseline(c, direct_vm, hid)
         c.accept_baseline(handover_id=hid)
 
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     h = c.get_handover(handover_id=hid)
     assert h["status"] == "ACCEPTED"
 
     # double acceptance / any later mutation attempt is rejected (HP1)
     with direct_vm.expect_revert("already resolved"):
+        attach_test_baseline(c, direct_vm, hid)
         c.accept_baseline(handover_id=hid)
     with direct_vm.expect_revert("already resolved"):
         c.dispute_baseline(handover_id=hid, reason="too late")
@@ -107,6 +161,7 @@ def test_custody_begin_end_and_overlap_rejection(direct_vm):
 
     hid1 = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid1)
     c.accept_baseline(handover_id=hid1)
     c.begin_custody(handover_id=hid1)
 
@@ -149,6 +204,7 @@ def test_evaluate_return_terminal_states(direct_vm):
     cid = comps["bumper"]
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -176,6 +232,7 @@ def test_evaluate_return_new_damage_creates_defect(direct_vm):
     cid = comps["bumper"]
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -226,6 +283,7 @@ def test_evaluate_return_evidence_unavailable(direct_vm):
     cid = comps["bumper"]
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -259,6 +317,7 @@ def test_evaluate_return_http_404_is_deterministically_unavailable(direct_vm):
     cid = comps["bumper"]
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -294,6 +353,7 @@ def test_content_hash_mismatch_fails_closed_to_unavailable(direct_vm):
     cid = comps["bumper"]
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -325,6 +385,7 @@ def test_content_hash_match_is_verified_and_evidence_accepted(direct_vm):
     cid = comps["bumper"]
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -355,6 +416,7 @@ def test_close_handover_requires_terminal_state(direct_vm):
         c.close_handover(handover_id=hid)
 
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
     mock_evidence(direct_vm)

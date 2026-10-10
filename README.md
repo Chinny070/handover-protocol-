@@ -1,5 +1,7 @@
 # Handover Protocol
 
+**Release status: not submission-ready.** The current Studionet candidate and its verified deployment facts are recorded in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). The funded write lifecycle and several release gates remain unverified; historical deployment evidence is explicitly separated from the current candidate.
+
 **Consensus-backed condition and custody certificates for physical
 assets.**
 
@@ -154,27 +156,13 @@ web/LLM/consensus logic of their own: `docs/INTEGRATION.md`.
 
 ## Verification
 
-Deployed and live-verified on Studionet — see `docs/DEPLOYMENT.md` for
-the canonical address, transaction hashes, and the full recorded
-lifecycle (baseline → custody → real consensus → condition delta → defect
-→ repair → certificate, plus a genuine validator-disagreement case and a
-genuine negative/fail-closed case).
+The current candidate is deployed, but it is **not release verified**. The deployment receipt and deployed-source parity were checked; the funded write lifecycle against this candidate did not reach a verified final state because Studionet receipt polling timed out. Historical lifecycle records below describe older deployments only. See `docs/DEPLOYMENT.md` and `docs/RELEASE_CANDIDATE_VERIFICATION.md` for exact addresses, hashes, checks, and open gates.
 
-**Direct Mode: 74/74 tests passing; integration: 4/4 real network reads
-against the canonical deployment (78/78 total, plus one opt-in funded
-write-lifecycle test — see below).** See
-`docs/RELEASE_CANDIDATE_VERIFICATION.md` for the exact command, counts,
-versions, and an honest list of what is still *not* run (a standalone
-GenVM static lint pass beyond "schema loads against the live
-deployment"). `content_hash` is cryptographically verified when submitted
-in strict sha256-digest form, and `SIGNED_INSPECTION` evidence requires a
-real secp256k1 signature from a trusted inspector key — see
-`docs/DEPLOYMENT.md` and `docs/EVIDENCE.md`.
+Latest local results before the current final rerun: Direct Mode 77 passed; the full suite and network integrations require rerunning. `scripts/preflight.py` and Python compilation passed. The installed CLI exposed deployment/schema validation but no separate GenVM lint command. High-assurance signatures are checked against frozen trusted inspector keys; strict SHA-256 content hashes are checked against fetched bytes. These properties are not represented as live lifecycle proof for the current deployment.
+
+The funded write test is opt-in because it submits real transactions:
 
 `HANDOVER_RUN_FUNDED_LIFECYCLE=1 pytest tests/integration/test_handover_studionet_write_lifecycle.py -v`
-runs a complete, fully automated real write lifecycle against the
-canonical deployment (not part of the default test run, since it submits
-real transactions).
 
 ```bash
 py -3.12 -m venv .venv-test
@@ -188,6 +176,6 @@ pytest tests/direct/ -v
 1. Read `DECISION.md` (why this primitive, why GenLayer, differentiation).
 2. Read `docs/INVARIANTS.md` (18 invariants; grep test files for the `HP`
    tag referenced in each test's docstring/comment).
-3. Run `pytest tests/direct/ -v` (74 tests, no network/deployment needed).
+3. Run `pytest tests/direct/ -v` (current count is recorded in release verification).
 4. Read `docs/CONSENSUS.md` and `tests/direct/test_handover_consensus.py`
    for the forged-leader proof.

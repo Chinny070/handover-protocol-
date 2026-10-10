@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "contracts"))
 
 from gltest.direct import create_address
 
-from _helpers import make_sealed_asset, renter_address, finding
+from _helpers import make_sealed_asset, renter_address, finding, attach_test_baseline
 
 VALID = {
     "condition_class": "NEW_MINOR_DAMAGE",
@@ -35,7 +35,7 @@ def _normalize(direct_vm, raw):
     SDK/path is set up) and call its pure normalization helper directly."""
     owner = create_address("owner")
     direct_vm.sender = owner
-    from _helpers import deploy
+    from _helpers import deploy, attach_test_baseline
 
     deploy(direct_vm)  # ensures contract module is importable below
     import importlib
@@ -160,6 +160,7 @@ def test_prompt_injection_text_is_only_data_not_authority(direct_vm):
     renter = renter_address("renter")
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 

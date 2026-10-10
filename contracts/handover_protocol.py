@@ -385,6 +385,10 @@ class Handover:
     scope_json: str  # JSON list[str] of component_ids
     status: str
     baseline_evidence_ids_json: str
+    # Frozen at acceptance: per-component evidence identifiers and their
+    # SHA-256 commitments. The referenced evidence records cannot be edited
+    # through the public API, and retrieval must reproduce these bytes.
+    baseline_snapshot_json: str
     return_evidence_ids_json: str
     acceptance_status: str  # "PENDING" | "ACCEPTED" | "DISPUTED"
     start_time: str
@@ -563,6 +567,40 @@ class HandoverProtocol(gl.Contract):
         missing = required_keys - set(policy.keys())
         if missing:
             raise Exception(f"policy missing keys: {sorted(missing)}")
+        supported_policy_keys = required_keys | {"trusted_inspectors"}
+        if set(policy.keys()) - supported_policy_keys:
+            raise Exception("policy contains unsupported fields")
+        component_names = {self.components[cid].name for cid in ids}
+        component_rules = policy["component_rules"]
+        if not isinstance(component_rules, dict) or len(component_rules) > MAX_COMPONENTS_PER_ASSET:
+            raise Exception("policy component_rules must be a bounded object")
+        for name, rule in component_rules.items():
+            if name not in component_names or not isinstance(rule, str) or not rule or len(rule) > MAX_REASON_CHARS:
+                raise Exception("component_rules must map an asset component name to a bounded non-empty rule")
+        wear_budget = policy["wear_budget"]
+        if not isinstance(wear_budget, dict) or len(wear_budget) > 16:
+            raise Exception("policy wear_budget must be a bounded object")
+        for key, value in wear_budget.items():
+            if not isinstance(key, str) or not key or not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+                raise Exception("wear_budget values must be non-negative numbers")
+        evidence_minimums = policy["evidence_minimums"]
+        if not isinstance(evidence_minimums, dict) or set(evidence_minimums) - {"minor", "major", "critical"}:
+            raise Exception("evidence_minimums must use minor, major, and critical keys")
+        for tiers in evidence_minimums.values():
+            if not isinstance(tiers, list) or not tiers or any(t not in ASSURANCE_TIERS for t in tiers):
+                raise Exception("evidence_minimums must contain non-empty lists of known assurance tiers")
+        attribution_minimums = policy["attribution_minimums"]
+        if not isinstance(attribution_minimums, dict) or set(attribution_minimums) - ATTRIBUTION_CLASSES:
+            raise Exception("attribution_minimums must use known attribution classes")
+        for tiers in attribution_minimums.values():
+            if not isinstance(tiers, list) or not tiers or any(t not in ASSURANCE_TIERS for t in tiers):
+                raise Exception("attribution_minimums must contain non-empty lists of known assurance tiers")
+        repair_rules = policy["repair_closure_requirements"]
+        if not isinstance(repair_rules, dict) or set(repair_rules) != {"require_receipt"} or not isinstance(repair_rules["require_receipt"], bool):
+            raise Exception("repair_closure_requirements must contain only boolean require_receipt")
+        challenge_window = policy["challenge_window"]
+        if not isinstance(challenge_window, int) or isinstance(challenge_window, bool) or not 1 <= challenge_window <= MAX_CHALLENGE_ROUNDS:
+            raise Exception("challenge_window must be an integer challenge-round limit within protocol bounds")
 
         # Optional: trusted inspector public keys for SIGNED_INSPECTION
         # tier verification (see _verify_inspector_signature). Absent or
@@ -638,6 +676,14 @@ class HandoverProtocol(gl.Contract):
             parent_scope = set(self._json_list(parent.scope_json))
             if not set(scope).issubset(parent_scope):
                 raise Exception("delegated scope exceeds parent scope (HP11)")
+            for existing_id in self._json_list(asset.handover_ids_json):
+                existing = self.handovers[existing_id]
+                if (
+                    existing.parent_handover_id == parent_handover_id
+                    and existing.status not in ("CANCELLED", "EXPIRED", "CLOSED")
+                    and set(scope) & set(self._json_list(existing.scope_json))
+                ):
+                    raise Exception("delegated custody scope overlaps an existing child interval")
             depth = int(parent.delegation_depth) + 1
             if depth > MAX_DELEGATION_DEPTH:
                 raise Exception("delegation depth bound exceeded (HP11)")
@@ -662,6 +708,7 @@ class HandoverProtocol(gl.Contract):
             scope_json=json.dumps(scope),
             status="BASELINE_PROPOSED",
             baseline_evidence_ids_json="[]",
+            baseline_snapshot_json="{}",
             return_evidence_ids_json="[]",
             acceptance_status="PENDING",
             start_time="",
@@ -830,6 +877,28 @@ class HandoverProtocol(gl.Contract):
             raise Exception("baseline already resolved (HP1 immutability)")
         if gl.message.sender_address != handover.to_party:
             raise Exception("only the receiving party may accept the baseline")
+        asset = self.assets[handover.asset_id]
+        scope = self._json_list(handover.scope_json)
+        evidence_ids = self._json_list(handover.baseline_evidence_ids_json)
+        snapshot = {}
+        for cid in scope:
+            component_evidence = []
+            for eid in evidence_ids:
+                ev = self.evidence[eid]
+                if cid in self._json_list(ev.component_ids_json):
+                    if not _is_strict_sha256_hex(ev.content_hash):
+                        raise Exception("baseline evidence requires a SHA-256 content digest")
+                    component_evidence.append({
+                        "evidence_id": eid,
+                        "content_hash": ev.content_hash,
+                        "source_url": ev.source_url,
+                        "evidence_kind": ev.evidence_kind,
+                    })
+            if not component_evidence:
+                raise Exception(f"baseline evidence missing for component {cid}")
+            snapshot[cid] = component_evidence
+        # This snapshot is write-once and becomes the canonical before-state.
+        handover.baseline_snapshot_json = json.dumps(snapshot, sort_keys=True)
         handover.status = "ACCEPTED"
         handover.acceptance_status = "ACCEPTED"
 
@@ -874,12 +943,10 @@ class HandoverProtocol(gl.Contract):
     def mark_custody_gap(self, handover_id: str, gap_state: str) -> None:
         """Deterministic recording of a detected custody/evidence discontinuity.
         Never silently assigns an attribution (HP3). Append-only: every
-        call is recorded in custody_gap_history_json, including one that
-        changes the current state to a less severe one -- a party cannot
-        silently erase an earlier gap report by overwriting it with
-        NO_GAP later; the original report stays visible in history even
-        though handover.custody_gap (the field the certificate reads)
-        reflects the latest call, same as before."""
+        call is recorded in custody_gap_history_json. Once a gap or
+        unknown interval is recorded, a participant cannot clear it by
+        writing NO_GAP. This version has no independent resolution
+        evidence workflow, so it conservatively keeps the gap consequential."""
         if gap_state not in GAP_STATES:
             raise Exception("unknown gap state")
         handover = self._get_handover(handover_id)
@@ -895,6 +962,11 @@ class HandoverProtocol(gl.Contract):
                 "set_by": gl.message.sender_address.as_hex,
             }
         )
+        if gap_state == "NO_GAP" and any(
+            e.get("gap_state") in ("PARTIAL_GAP", "CUSTODY_GAP", "UNKNOWN")
+            for e in history[:-1]
+        ):
+            raise Exception("recorded custody gap cannot be cleared without verified resolution")
         handover.custody_gap_history_json = json.dumps(history)
         handover.custody_gap = gap_state
 
@@ -911,6 +983,13 @@ class HandoverProtocol(gl.Contract):
         self._require_handover_party(handover)
         if handover.status != "RETURN_PENDING":
             raise Exception("no return evidence submitted")
+        for child_id in self._json_list(self.assets[handover.asset_id].handover_ids_json):
+            child = self.handovers[child_id]
+            if child.parent_handover_id == handover_id and child.status not in (
+                "CLOSED", "CANCELLED", "EXPIRED", "RETURN_CLEAR", "DEFECTS_RECORDED",
+                "INCONCLUSIVE", "EVIDENCE_UNAVAILABLE",
+            ):
+                raise Exception("cannot assess parent return while delegated custody remains unresolved")
 
         asset = self.assets[handover.asset_id]
         scope = self._json_list(handover.scope_json)
@@ -934,13 +1013,30 @@ class HandoverProtocol(gl.Contract):
                 evidence_tiers_by_component.setdefault(cid, []).append(ev.assurance_tier)
                 evidence_hashes_by_component.setdefault(cid, []).append(ev.content_hash)
 
+        # Read the immutable accepted baseline snapshot separately. Every
+        # observation used in the comparison is fetched and hash-checked;
+        # a missing or changed baseline is an unavailable assessment.
+        baseline_snapshot = json.loads(handover.baseline_snapshot_json or "{}")
+        baseline_urls_by_component = {}
+        baseline_hashes_by_component = {}
+        for cid, records in baseline_snapshot.items():
+            for record in records:
+                baseline_urls_by_component.setdefault(cid, []).append(record["source_url"])
+                baseline_hashes_by_component.setdefault(cid, []).append(record["content_hash"])
+
         def leader_fn():
             findings = []
             for cid in scope:
                 urls = evidence_urls_by_component.get(cid, [])
                 hashes = evidence_hashes_by_component.get(cid, [])
                 candidate_ids = candidates_by_component.get(cid, [])
-                finding = _classify_component(cid, urls, candidate_ids, policy, hashes)
+                component_policy = dict(policy)
+                component_policy["_component_rule"] = policy["component_rules"].get(self.components[cid].name, "")
+                finding = _classify_component(
+                    cid, urls, candidate_ids, component_policy, hashes,
+                    baseline_urls_by_component.get(cid, []),
+                    baseline_hashes_by_component.get(cid, []),
+                )
                 findings.append(finding)
             return findings
 
@@ -958,7 +1054,13 @@ class HandoverProtocol(gl.Contract):
                 urls = evidence_urls_by_component.get(cid, [])
                 hashes = evidence_hashes_by_component.get(cid, [])
                 candidate_ids = candidates_by_component.get(cid, [])
-                my_findings.append(_classify_component(cid, urls, candidate_ids, policy, hashes))
+                component_policy = dict(policy)
+                component_policy["_component_rule"] = policy["component_rules"].get(self.components[cid].name, "")
+                my_findings.append(_classify_component(
+                    cid, urls, candidate_ids, component_policy, hashes,
+                    baseline_urls_by_component.get(cid, []),
+                    baseline_hashes_by_component.get(cid, []),
+                ))
 
             leader_by_cid = {}
             for f in leader_findings:
@@ -1039,6 +1141,19 @@ class HandoverProtocol(gl.Contract):
             relation = f["defect_relation"]
             severity = f["severity"]
             attribution = f["attribution_class"]
+
+            attribution_tiers = policy.get("attribution_minimums", {}).get(attribution)
+            decisive_attributions = {
+                "FIRST_OBSERVED_IN_INTERVAL", "SUPPORTED_AS_NEW_IN_INTERVAL",
+                "WORSENED_IN_INTERVAL", "CONTINUATION_OF_PRIOR_DEFECT",
+            }
+            if attribution in decisive_attributions and (
+                not attribution_tiers
+                or not evidence_tiers_by_component.get(cid)
+                or evidence_tiers_by_component[cid][0] not in attribution_tiers
+            ):
+                any_inconclusive = True
+                continue
 
             if cond == "UNAVAILABLE":
                 any_unavailable = True
@@ -1128,7 +1243,7 @@ class HandoverProtocol(gl.Contract):
         d = self.defects[defect_id]
         history = self._json_list(d.history_json)
         if len(history) >= MAX_DEFECT_HISTORY_EVENTS:
-            history = history[-(MAX_DEFECT_HISTORY_EVENTS - 1):]
+            raise Exception("defect history bound exceeded; prior events are immutable (HP15)")
         history.append(
             {
                 "event": event,
@@ -1201,6 +1316,9 @@ class HandoverProtocol(gl.Contract):
         self._require_defect_party(d)
         if int(d.challenge_count) >= MAX_CHALLENGE_ROUNDS:
             raise Exception("challenge bound exceeded (HP12)")
+        asset_policy = json.loads(self.assets[d.asset_id].policy_json)
+        if int(d.challenge_count) >= int(asset_policy["challenge_window"]):
+            raise Exception("frozen policy challenge window exhausted")
 
         source_url = self._bound_text(source_url, MAX_NAME_CHARS * 4, "source_url")
         content_hash = self._bound_text(content_hash, 256, "content_hash")
@@ -1266,6 +1384,13 @@ class HandoverProtocol(gl.Contract):
             raise Exception("defect is not open for repair")
         if int(d.repair_count) >= MAX_REPAIR_ROUNDS:
             raise Exception("repair round bound exceeded (HP15)")
+        policy = json.loads(self.assets[d.asset_id].policy_json)
+        if policy["repair_closure_requirements"]["require_receipt"] and evidence_kind not in (
+            "REPAIR_RECEIPT", "SERVICE_RECORD"
+        ):
+            raise Exception("frozen repair policy requires a repair receipt or service record")
+        if not _is_strict_sha256_hex(content_hash):
+            raise Exception("repair evidence requires a SHA-256 content digest")
 
         evidence_id = self._next_id("E", "evidence_count")
         self.evidence[evidence_id] = Evidence(
@@ -1333,6 +1458,14 @@ class HandoverProtocol(gl.Contract):
         self._require_handover_party(handover)
         if handover.status not in ("RETURN_CLEAR", "DEFECTS_RECORDED", "INCONCLUSIVE", "EVIDENCE_UNAVAILABLE"):
             raise Exception("handover not ready to close")
+        asset = self.assets[handover.asset_id]
+        for child_id in self._json_list(asset.handover_ids_json):
+            child = self.handovers[child_id]
+            if child.parent_handover_id == handover_id and child.status not in (
+                "CLOSED", "CANCELLED", "EXPIRED", "RETURN_CLEAR", "DEFECTS_RECORDED",
+                "INCONCLUSIVE", "EVIDENCE_UNAVAILABLE",
+            ):
+                raise Exception("parent custody has an active or unresolved delegated child")
         handover.status = "CLOSED"
 
     @gl.public.write
@@ -1405,7 +1538,24 @@ class HandoverProtocol(gl.Contract):
         asset = self.assets[asset_id]
         if not asset.active_handover_id:
             return ""
-        return self.handovers[asset.active_handover_id].to_party.as_hex
+        current_id = asset.active_handover_id
+        for _ in range(MAX_DELEGATION_DEPTH):
+            current = self.handovers[current_id]
+            parent_scope = set(self._json_list(current.scope_json))
+            active_children = []
+            for hid in self._json_list(asset.handover_ids_json):
+                child = self.handovers[hid]
+                if child.parent_handover_id == current_id and child.status == "ACTIVE":
+                    active_children.append(child)
+            if not active_children:
+                return current.to_party.as_hex
+            # A single effective custodian exists only if the delegation
+            # covers the full parent scope. Partial parallel delegations
+            # cannot be represented by this asset-wide view.
+            if len(active_children) != 1 or set(self._json_list(active_children[0].scope_json)) != parent_scope:
+                return ""
+            current_id = active_children[0].handover_id
+        return ""
 
     @gl.public.view
     def get_custody_chain(self, asset_id: str) -> list:
@@ -1458,11 +1608,19 @@ class HandoverProtocol(gl.Contract):
                 unresolved_count += 1
 
         gap_present = False
+        lifecycle_pending = False
+        lifecycle_inconclusive = False
         for hid in self._json_list(asset.handover_ids_json):
             h = self.handovers[hid]
-            if h.custody_gap in ("PARTIAL_GAP", "CUSTODY_GAP"):
+            history = self._json_list(h.custody_gap_history_json)
+            if h.custody_gap in ("PARTIAL_GAP", "CUSTODY_GAP", "UNKNOWN") or any(
+                e.get("gap_state") in ("PARTIAL_GAP", "CUSTODY_GAP", "UNKNOWN") for e in history
+            ):
                 gap_present = True
-                break
+            if h.status in ("DRAFT", "BASELINE_PROPOSED", "ACCEPTED", "ACTIVE", "RETURN_PENDING", "EVALUATING", "CHALLENGED", "REPAIR_PENDING"):
+                lifecycle_pending = True
+            if h.status in ("INCONCLUSIVE", "EVIDENCE_UNAVAILABLE", "BASELINE_DISPUTED", "EXPIRED"):
+                lifecycle_inconclusive = True
 
         latest_cp = None
         if asset.latest_checkpoint_id:
@@ -1474,7 +1632,16 @@ class HandoverProtocol(gl.Contract):
                 "consensus_digest": cp.consensus_digest,
             }
 
-        certificate_status = "CLEAR"
+        # Clearance is affirmative: require a completed return checkpoint,
+        # no pending or inconclusive lifecycle, and no unresolved historic
+        # custody discontinuity. Absence of a defect record proves nothing.
+        certificate_status = "UNASSESSED"
+        if not asset.latest_checkpoint_id or lifecycle_pending:
+            certificate_status = "PENDING_ASSESSMENT"
+        elif lifecycle_inconclusive:
+            certificate_status = "INCONCLUSIVE"
+        else:
+            certificate_status = "CLEAR"
         if critical_count > 0:
             certificate_status = "CRITICAL_OPEN"
         elif major_count > 0:
@@ -1568,9 +1735,13 @@ def _fetch_text(url: str, expected_content_hash: str = "") -> tuple:
 
 
 def _classify_component(
-    component_id: str, urls: list, candidate_defect_ids: list, policy: dict, content_hashes: list = None
+    component_id: str, urls: list, candidate_defect_ids: list, policy: dict,
+    content_hashes: list = None, baseline_urls: list = None,
+    baseline_hashes: list = None,
 ) -> dict:
-    if not urls:
+    baseline_urls = baseline_urls or []
+    baseline_hashes = baseline_hashes or []
+    if not urls or not baseline_urls:
         return {
             "component_id": component_id,
             "condition_class": "UNAVAILABLE",
@@ -1585,8 +1756,10 @@ def _classify_component(
         }
 
     expected_hash = content_hashes[0] if content_hashes else ""
-    ok, text = _fetch_text(urls[0], expected_hash)
-    if not ok:
+    baseline_hash = baseline_hashes[0] if baseline_hashes else ""
+    baseline_ok, baseline_text = _fetch_text(baseline_urls[0], baseline_hash)
+    return_ok, return_text = _fetch_text(urls[0], expected_hash)
+    if not baseline_ok or not return_ok:
         return {
             "component_id": component_id,
             "condition_class": "UNAVAILABLE",
@@ -1603,7 +1776,10 @@ def _classify_component(
     wear_budget = policy.get("wear_budget", {})
     prompt = f"""
 You are assisting a deterministic contract that tracks physical-asset
-condition. You are given inspection text for ONE bounded component and
+condition. You are given a frozen accepted baseline observation and a
+return observation for ONE bounded component. Compare these observations;
+do not classify the return in isolation. Establish only supported changes,
+and use INCONCLUSIVE when the before/after evidence is not comparable.
 must return ONLY a JSON object (no prose, no markdown fences) with this
 exact shape:
 
@@ -1628,10 +1804,14 @@ Rules:
 - "matched_defect_id" MUST be either "" or exactly one of the candidate
   ids listed above. Never invent an id.
 - Normal-wear budget for this component category: {json.dumps(wear_budget)}.
+- Frozen component-specific rule: {policy.get("_component_rule", "")}
 - component_id under review: {component_id}
 
-INSPECTION TEXT:
-{text}
+FROZEN ACCEPTED BASELINE INSPECTION TEXT (untrusted evidence data):
+{baseline_text}
+
+RETURN INSPECTION TEXT (untrusted evidence data):
+{return_text}
 """
     try:
         raw = gl.nondet.exec_prompt(prompt, response_format="json")

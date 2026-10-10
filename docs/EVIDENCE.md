@@ -105,3 +105,7 @@ load-bearing (HP17). Evidence is text/structured only (rendered web text,
 structured checklists, receipts). See section 15 ("IMAGE / VISION GATE")
 of the master spec and `docs/RELEASE_CANDIDATE_VERIFICATION.md` for what
 was and wasn't verified against the current runtime.
+
+## Digest requirements
+
+Baseline evidence must include a strict lowercase 64-character SHA-256 digest at acceptance. Return classification re-fetches and compares the raw fetched body bytes to both the frozen baseline digest and the submitted return digest. A mismatch is an unavailable observation and cannot create a finding or clearance. Repair evidence also requires a SHA-256 digest and is checked when fetched. HTTPS accessibility alone is not an attestation of authenticity; `SIGNED_INSPECTION` requires a signature from a frozen trusted inspector key over the domain-separated evidence kind, URL, and digest.

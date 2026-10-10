@@ -1,42 +1,34 @@
 # DEPLOYMENT.md
 
-## Status: deployed to Studionet, full live lifecycle proven (Gates 1-3)
+## Status: fresh contract deployed; release lifecycle is incomplete
 
-**Canonical contract address:** `0x54953F416c4Dc8B80559bb877870Cf636431c658`
-**Deployment transaction:** `0x3a1c1ca8ccab713d4e1c9e5e36449c42f9be602b48f550a58ffff5efdd410404`
-**Network:** Genlayer Studio Network (`studionet`, chainId `61999`)
-**Explorer (contract page):**
-https://explorer-studio.genlayer.com/address/0x54953F416c4Dc8B80559bb877870Cf636431c658
-**Deployer account:** `0xaffE15eEc45b68835cc9E5B4Ab85dD5deaE8e70b`
-(`my-studionet-wallet`)
+**Canonical candidate address:** `0xB0F0509f35846481622d6A3dEcA0601618FFfC34`
+**Deployment transaction:** `0xb6fb9266ed849ae415eccca365d1e1725f5cc8eca5791166e4e2fe14c943ce3c`
+**Network:** GenLayer Studio Network (`studionet`, chain ID `61999`)
+**Explorer contract:** [0xB0F0509f35846481622d6A3dEcA0601618FFfC34](https://explorer-studio.genlayer.com/address/0xB0F0509f35846481622d6A3dEcA0601618FFfC34)
+**Explorer deployment transaction:** [0xb6fb9266ed849ae415eccca365d1e1725f5cc8eca5791166e4e2fe14c943ce3c](https://explorer-studio.genlayer.com/tx/0xb6fb9266ed849ae415eccca365d1e1725f5cc8eca5791166e4e2fe14c943ce3c)
+**Deployer:** `0xaffE15eEc45b68835cc9E5B4Ab85dD5deaE8e70b` (`my-studionet-wallet`)
+**Normalized deployed-source SHA-256:** `7ac07ae241c43ae8685f053e2f261f312e1994637010b588a4bcebe58883b0bf`
 
-Verified independently, not just the CLI's own echo:
+Verified for this candidate:
 
-- `genlayer receipt <tx>` → `status_name: 'FINALIZED'`, leader result
-  `{ status: 'return', payload: null }` (3/5 validators AGREE, majority).
-- `genlayer schema <address>` → 28 methods with the full expected ABI.
-- `python scripts/source_parity.py` → `PASS`: byte-for-byte identical to
-  `contracts/handover_protocol.py` in this working tree.
-- `tests/integration/test_handover_studionet.py` → 4/4 passed, real
-  network reads against this exact address (see "Automated integration
-  checks" below).
+- The deployment transaction reached `FINALIZED` with `MAJORITY_AGREE`; the five recorded validator votes were AGREE.
+- `genlayer schema 0xB0F0509f35846481622d6A3dEcA0601618FFfC34` returned the contract ABI (28 public methods).
+- `python scripts/source_parity.py 0xB0F0509f35846481622d6A3dEcA0601618FFfC34` returned PASS, byte-for-byte after line-ending normalization.
+- Direct Mode: 77 passed. The repository-wide run before the latest integration-test rewrite was 77 passed, 5 skipped; rerun is required before release.
+- `python scripts/preflight.py` passed static checks. A dedicated GenVM lint command was not available in the installed CLI; deployment itself compiled and executed the constructor successfully.
 
-This is the **sixth** deployment, superseding
-`0xc877275d6B3Ad199f2a9eae97EE9eF25A0783807` (the custody-gap-history
-deployment; predates inspector-signature verification and content-hash
-digest binding below), which superseded
-`0x4b4D04B5268cC7e20ea6970947Cf2f9b29B0aB92` (the authorization/
-evidence-integrity fix deployment), which superseded
-`0x785503f0aB50C458813AdEE36B43937Ebb884077` (predates the
-authorization/evidence-integrity fixes), which superseded
-`0xD16141830b78A71b6F594d90fa4E1a6eF717DE85` (fixed the `_fetch_text`
-HTTP-status bug, predates evidence-assurance and real-challenge wiring),
-which superseded `0x796bfBD33C7fFD8330F8ff6cCD46681B7E938ACe` (predates
-the HTTP-status fix), which superseded a first attempt that failed
-outright over a bad dependency pin. No earlier address is canonical.
+The live write lifecycle is **not verified**. Funded write attempts returned transaction hashes but the required follow-up `FINALIZED` receipt queries repeatedly timed out against the Studionet RPC. No condition-delta, defect, repair, challenge, or custody-gap live lifecycle is claimed for this deployment. A known non-finalized write must be checked by its hash before any retry. Historical lifecycle entries below describe the prior `0x54953F416c4Dc8B80559bb877870Cf636431c658` deployment only; they are not evidence for this candidate's new baseline-comparison or certificate logic.
 
-## Inspector-signature verification and content-hash digest binding,
-proven live
+The candidate is not submission-ready while the live lifecycle, full adversarial reviewer pass, repository CI, final documentation review, and push of the tested source commit remain outstanding. The application-side CLI write helper now waits for `FINALIZED` instead of stopping at `ACCEPTED`.
+
+## Historical deployment evidence
+
+The following sections record verified activity on the prior deployment at `0x54953F416c4Dc8B80559bb877870Cf636431c658`. They remain historical records and do not prove the newly deployed source's behavior.
+
+## Historical: inspector-signature verification and content-hash digest binding
+
+These records belong to the prior deployment identified above; they are not proof for the current candidate.
 
 Both items were built from scratch with no external crypto dependency --
 inspecting the extracted `genvm-universal` runtime confirmed no
@@ -97,8 +89,9 @@ handover `H1` (correct digest) and a fresh asset `A2` / handover `H2`
 | **Return evidence with a deliberately wrong digest** | `submit_return_evidence(H2, ..., content_hash=<wrong sha256>)` | `0x4a878fe198c16d8642b7dd09378040de6dc651d23c545c1f6a438fdb295f382b` | accepted (stored; checked at evaluation time) |
 | **Evaluate (digest mismatched)** | `evaluate_return(H2)` | `0x971239d40204dd1831bc31727bddda6a4e9ddc6396f9d7e2c1de26aa5ecf3dad` | `EVIDENCE_UNAVAILABLE`, **finalized cleanly (not UNDETERMINED)** -- the mismatch is checked deterministically before any model call, so there is no cross-model variance to disagree about |
 
-## Custody-gap-history and challenge-reason append-only history, also
-re-demonstrated on the current deployment
+## Historical: custody-gap-history and challenge-reason history
+
+The following transaction records belong to an older deployment; they are not a current-candidate demonstration.
 
 `mark_custody_gap(H1, CUSTODY_GAP)` (tx
 `0xc0c060e54e5846ff062226d1930c8c8ac517f8abfe05c6171535f4c4e7a62f87`)
@@ -109,7 +102,7 @@ followed by `mark_custody_gap(H1, NO_GAP)` (tx
 `tests/integration/test_handover_studionet.py` for the exact assertions
 against this real state.
 
-## Automated FUNDED write lifecycle (item 5), proven end-to-end
+## Historical: automated funded write lifecycle on a superseded deployment
 
 `tests/integration/test_handover_studionet_write_lifecycle.py` drives a
 full real write lifecycle (register → component → seal → propose →
@@ -165,7 +158,7 @@ specific transaction history is superseded; `tests/integration/test_handover_stu
 now asserts against the equivalent re-demonstration on the current
 canonical deployment (see above).
 
-## Security review fixes, proven live (not just in Direct Mode)
+## Historical: security review fixes verified on an earlier deployment
 
 An external review of the previous canonical deployment found that most
 public write methods had no caller authorization at all, and two gaps in

@@ -69,3 +69,11 @@ A `Checkpoint` is created on every `evaluate_return` call, recording
 `condition_digest`/`evidence_digest`/`consensus_digest` hashes and whether
 a custody gap was present — this is the immutable condition-passport
 lineage (section 22 of the master spec).
+
+## Baseline-to-return comparison
+
+Before acceptance, each component in the proposed scope must have at least one baseline evidence record with a strict lowercase SHA-256 digest. Acceptance freezes the selected evidence IDs, URLs, kinds, and digests in `baseline_snapshot_json`. On return, leader and validators independently retrieve the frozen baseline and return observations, verify both raw-body digests, then classify the before/after pair. Missing or changed baseline bytes produce `EVIDENCE_UNAVAILABLE`; a return-only inspection cannot produce a condition delta. The protocol does not establish physical causation or when a defect occurred.
+
+A certificate is `CLEAR` only after an affirmative return checkpoint and only when no handover remains pending or inconclusive, no defect is open, and no custody gap has ever been recorded. This release has no independent custody-gap resolution workflow, so recorded gaps remain consequential.
+
+Frozen policy schema is closed. `component_rules` maps known component names to bounded text rules; `wear_budget` is a bounded map of non-negative numbers; evidence and attribution minimums map known classes to non-empty lists of assurance tiers; repair closure uses boolean `require_receipt`; and `challenge_window` is a challenge-round limit bounded by protocol maxima. Invalid and unknown fields are rejected during sealing.

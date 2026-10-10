@@ -3,11 +3,12 @@ custody-gap honesty (HP3, HP11)."""
 
 from gltest.direct import create_address
 
-from _helpers import deploy, make_sealed_asset, renter_address, mock_clear_evidence
+from _helpers import deploy, make_sealed_asset, renter_address, mock_clear_evidence, attach_test_baseline
 
 
 def _accept_and_begin(c, vm, hid, custodian):
     vm.sender = custodian
+    attach_test_baseline(c, vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -128,17 +129,15 @@ def test_custody_gap_history_is_append_only_and_not_erasable(direct_vm):
 
     c.mark_custody_gap(handover_id=hid, gap_state="CUSTODY_GAP")
     direct_vm.sender = renter
-    c.mark_custody_gap(handover_id=hid, gap_state="NO_GAP")
+    with direct_vm.expect_revert("cannot be cleared without verified resolution"):
+        c.mark_custody_gap(handover_id=hid, gap_state="NO_GAP")
 
     h = c.get_handover(handover_id=hid)
-    assert h["custody_gap"] == "NO_GAP"  # latest call wins for the live field
+    assert h["custody_gap"] == "CUSTODY_GAP"
 
     history = c.get_custody_gap_history(handover_id=hid)
-    assert len(history) == 2
+    assert len(history) == 1
     assert history[0]["gap_state"] == "CUSTODY_GAP"
     assert history[0]["previous_gap_state"] == "NO_GAP"
-    assert history[1]["gap_state"] == "NO_GAP"
-    assert history[1]["previous_gap_state"] == "CUSTODY_GAP"
-    assert history[1]["set_by"].lower() == renter.as_hex.lower()
     # The original CUSTODY_GAP report is still visible despite being
     # "overwritten" in the live field -- nothing was erased.

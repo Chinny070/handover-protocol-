@@ -4,12 +4,13 @@ history, temporal attribution outcomes (HP7, HP8, HP9)."""
 import json
 from gltest.direct import create_address
 
-from _helpers import make_sealed_asset, renter_address, finding
+from _helpers import make_sealed_asset, renter_address, finding, attach_test_baseline
 
 
 def _handover_through_return(c, vm, aid, cid, custodian, web_body, llm_json, url="https://example.com/inspect"):
     hid = c.propose_handover(asset_id=aid, to_party=custodian.as_hex, scope_component_ids=[cid])
     vm.sender = custodian
+    attach_test_baseline(c, vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
     vm.mock_web(url.split("//", 1)[-1], {"status": 200, "body": web_body})
@@ -64,9 +65,11 @@ def test_worsened_defect_links_to_predecessor_history(direct_vm):
     direct_vm.sender = owner
     hid2 = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid2)
     c.accept_baseline(handover_id=hid2)
     c.begin_custody(handover_id=hid2)
     direct_vm.clear_mocks()  # the first stage's ".*" LLM mock must not leak into this one
+    attach_test_baseline(c, direct_vm, hid2)
     direct_vm.mock_web(
         "example.com/inspect2", {"status": 200, "body": "The scratch is now a crack."}
     )
@@ -120,6 +123,7 @@ def test_invented_matched_defect_id_fails_closed(direct_vm):
 
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
     direct_vm.mock_web("example.com/inspect", {"status": 200, "body": "Dent."})

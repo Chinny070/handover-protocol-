@@ -11,7 +11,7 @@ one legitimate party is accepted, for every affected method."""
 
 from gltest.direct import create_address
 
-from _helpers import make_sealed_asset, renter_address, mock_clear_evidence, finding
+from _helpers import make_sealed_asset, renter_address, mock_clear_evidence, finding, attach_test_baseline
 
 
 def _sealed_asset_and_stranger(vm):
@@ -40,6 +40,7 @@ def test_delegate_custody_requires_current_custodian(direct_vm):
     direct_vm.sender = owner
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -90,6 +91,7 @@ def test_submit_return_evidence_requires_current_custodian(direct_vm):
     direct_vm.sender = owner
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -125,6 +127,7 @@ def test_begin_custody_requires_handover_party(direct_vm):
     direct_vm.sender = owner
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
 
     direct_vm.sender = stranger
@@ -157,6 +160,7 @@ def test_evaluate_return_requires_handover_party(direct_vm):
     direct_vm.sender = owner
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
     mock_clear_evidence(direct_vm)
@@ -179,6 +183,7 @@ def _defect_through_return(c, vm, aid, cid, owner, renter):
     vm.sender = owner
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     vm.sender = renter
+    attach_test_baseline(c, vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
     vm.mock_web("example.com/inspect", {"status": 200, "body": "Dent."})
@@ -236,13 +241,13 @@ def test_submit_repair_requires_defect_party(direct_vm):
     with direct_vm.expect_revert("caller is not a party to this defect"):
         c.submit_repair(
             defect_id=did, evidence_kind="REPAIR_RECEIPT",
-            source_url="https://example.com/receipt", content_hash="hr",
+            source_url="https://example.com/receipt", content_hash="0000000000000000000000000000000000000000000000000000000000000000",
         )
 
     direct_vm.sender = renter
     c.submit_repair(
         defect_id=did, evidence_kind="REPAIR_RECEIPT",
-        source_url="https://example.com/receipt", content_hash="hr",
+        source_url="https://example.com/receipt", content_hash="0000000000000000000000000000000000000000000000000000000000000000",
     )
     assert c.get_defect(defect_id=did)["status"] == "REPAIR_CLAIMED"
 
@@ -254,7 +259,7 @@ def test_verify_repair_requires_defect_party(direct_vm):
     direct_vm.sender = renter
     c.submit_repair(
         defect_id=did, evidence_kind="REPAIR_RECEIPT",
-        source_url="https://example.com/receipt", content_hash="hr",
+        source_url="https://example.com/receipt", content_hash="16694f382e9f2cba2ef9b99a9a31c31af074ca99d6171d335d2bf245446e561d",
     )
 
     direct_vm.clear_mocks()
@@ -276,6 +281,7 @@ def test_close_handover_requires_handover_party(direct_vm):
     direct_vm.sender = owner
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
     mock_clear_evidence(direct_vm)

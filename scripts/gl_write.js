@@ -57,7 +57,12 @@ async function main() {
   });
   console.log("Write Transaction Hash:", hash);
 
-  const receipt = await client.waitForTransactionReceipt({ hash, retries: 100, interval: 5000 });
+  // A write can reach ACCEPTED well before it is FINALIZED. Release evidence
+  // and integration assertions must wait for final fee settlement and the
+  // terminal transaction state, not stop at the consensus decision.
+  const receipt = await client.waitForTransactionReceipt({
+    hash, status: "FINALIZED", retries: 120, interval: 5000,
+  });
   console.log(JSON.stringify(receipt, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 2));
 }
 

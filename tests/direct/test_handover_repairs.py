@@ -2,12 +2,13 @@
 
 from gltest.direct import create_address
 
-from _helpers import make_sealed_asset, renter_address, finding
+from _helpers import make_sealed_asset, renter_address, finding, attach_test_baseline
 
 
 def _create_open_defect(c, vm, aid, cid, renter):
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     vm.sender = renter
+    attach_test_baseline(c, vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
     vm.mock_web("example.com/inspect", {"status": 200, "body": "Dent."})
@@ -44,7 +45,7 @@ def test_repair_submission_and_verified_repaired(direct_vm):
         defect_id=did,
         evidence_kind="REPAIR_RECEIPT",
         source_url="https://example.com/receipt",
-        content_hash="r1",
+        content_hash="4f90f07cdd8ba6d32f9c9d79586e8b42737880b059dd0e20d8f43f74e0c8681c",
     )
     assert c.get_defect(defect_id=did)["status"] == "REPAIR_CLAIMED"
 
@@ -76,7 +77,7 @@ def test_repair_not_repaired_reopens_defect(direct_vm):
         defect_id=did,
         evidence_kind="REPAIR_RECEIPT",
         source_url="https://example.com/receipt",
-        content_hash="r1",
+        content_hash="dc74af31d7b60b3ed559d7c4fb84d85e9885d772d38d029c50ff6e701ef5ce9c",
     )
     direct_vm.mock_web("example.com/receipt", {"status": 200, "body": "Receipt for an unrelated oil change."})
     direct_vm.mock_llm(".*", '{"repair_result": "NOT_REPAIRED"}')
@@ -98,7 +99,7 @@ def test_repair_receipt_unavailable_is_external_failure_not_repaired(direct_vm):
         defect_id=did,
         evidence_kind="REPAIR_RECEIPT",
         source_url="https://unreachable.example/receipt",
-        content_hash="r1",
+        content_hash="0000000000000000000000000000000000000000000000000000000000000000",
     )
     result = c.verify_repair(defect_id=did)
     assert result == "EXTERNAL_FAILURE"
@@ -122,7 +123,7 @@ def test_repair_round_bound_enforced(direct_vm):
             defect_id=did,
             evidence_kind="REPAIR_RECEIPT",
             source_url="https://example.com/receipt",
-            content_hash="r",
+            content_hash="00177462b5d91f6336f1594a75a20cabbb9a6d74379a11c05be498ce9106df7a",
         )
         c.verify_repair(defect_id=did)
 
@@ -131,7 +132,7 @@ def test_repair_round_bound_enforced(direct_vm):
             defect_id=did,
             evidence_kind="REPAIR_RECEIPT",
             source_url="https://example.com/receipt",
-            content_hash="r",
+            content_hash="0000000000000000000000000000000000000000000000000000000000000000",
         )
 
 
@@ -143,9 +144,9 @@ def test_submit_repair_requires_open_defect(direct_vm):
     did = _create_open_defect(c, direct_vm, aid, cid, renter)
 
     c.submit_repair(
-        defect_id=did, evidence_kind="REPAIR_RECEIPT", source_url="https://example.com/receipt", content_hash="r"
+        defect_id=did, evidence_kind="REPAIR_RECEIPT", source_url="https://example.com/receipt", content_hash="0000000000000000000000000000000000000000000000000000000000000000"
     )
     with direct_vm.expect_revert("not open for repair"):
         c.submit_repair(
-            defect_id=did, evidence_kind="REPAIR_RECEIPT", source_url="https://example.com/receipt", content_hash="r"
+            defect_id=did, evidence_kind="REPAIR_RECEIPT", source_url="https://example.com/receipt", content_hash="0000000000000000000000000000000000000000000000000000000000000000"
         )

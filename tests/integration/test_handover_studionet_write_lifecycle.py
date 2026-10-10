@@ -31,7 +31,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GL_WRITE = REPO_ROOT / "scripts" / "gl_write.js"
-CANONICAL_ADDRESS = "0x54953F416c4Dc8B80559bb877870Cf636431c658"
+CANONICAL_ADDRESS = "0xB0F0509f35846481622d6A3dEcA0601618FFfC34"
 OWNER_ACCOUNT = "my-studionet-wallet"
 RENTER_ADDRESS = "0x10b091a7b19d3f0da511a06985a8636fa58a0377"  # offset-bob
 
@@ -43,6 +43,9 @@ pytestmark = pytest.mark.skipif(
         "HANDOVER_RUN_FUNDED_LIFECYCLE=1."
     ),
 )
+
+
+LIVE_TXS = []
 
 
 def _write(account: str, method: str, args: list, retries: int = 3):
@@ -67,6 +70,34 @@ def _write(account: str, method: str, args: list, retries: int = 3):
         out = proc.stdout
         if proc.returncode == 0 and '"status_name"' in out:
             receipt = json.loads(out[out.index("{") :])
+            tx_hash = receipt.get("tx_id") or receipt.get("hash")
+            if not tx_hash:
+                pytest.fail(f"write returned no transaction hash for {method}: {out[-2000:]}")
+            if receipt.get("status_name") != "FINALIZED":
+                # genlayer-js can return ACCEPTED before the transaction is
+                # finalized. Poll the official CLI by hash; never re-submit
+                # a write whose transaction hash is already known.
+                cli = shutil.which("genlayer")
+                if cli is None:
+                    pytest.fail(f"{method} submitted as {tx_hash} but GenLayer CLI is unavailable to verify finalization")
+                finalized = subprocess.run(
+                    [cli, "receipt", tx_hash, "--status", "FINALIZED", "--retries", "100",
+                     "--interval", "3000", "--rpc", "https://studio.genlayer.com/api"],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                    cwd=REPO_ROOT, timeout=360,
+                )
+                if finalized.returncode != 0 or "FINALIZED" not in (finalized.stdout + finalized.stderr):
+                    pytest.fail(
+                        f"{method} transaction {tx_hash} was submitted but finalization was not verified; "
+                        f"do not resubmit it. {finalized.stdout[-1000:]} {finalized.stderr[-1000:]}"
+                    )
+            LIVE_TXS.append({
+                "method": method,
+                "hash": tx_hash,
+                "status": "FINALIZED",
+                "consensus": receipt.get("result_name"),
+                "votes": receipt.get("consensus_data", {}).get("votes", {}),
+            })
             return receipt
         last_err = proc.stdout + proc.stderr
         time.sleep(5 * (attempt + 1))
@@ -122,8 +153,8 @@ def test_full_funded_write_lifecycle(read_client):
             "component_rules": {"bumper": "cosmetic"},
             "wear_budget": {},
             "evidence_minimums": {"minor": ["SELF_REPORTED"]},
-            "attribution_minimums": {},
-            "repair_closure_requirements": {},
+            "attribution_minimums": {"SUPPORTED_AS_NEW_IN_INTERVAL": ["SINGLE_PUBLIC_SOURCE"]},
+            "repair_closure_requirements": {"require_receipt": True},
             "challenge_window": 3,
         }
     )
@@ -140,23 +171,36 @@ def test_full_funded_write_lifecycle(read_client):
     # offset-bob (RENTER_ADDRESS) must accept -- its key is a pre-existing
     # genlayer account in this environment ("offset-bob"), same pattern
     # used throughout docs/DEPLOYMENT.md's manual runs.
+    fixture_url = (
+        "https://raw.githubusercontent.com/Chinny070/handover-protocol-"
+        "/main/fixtures/vehicle_baseline_bumper.txt"
+    )
+    baseline_hash = "3bb1b4346b81a21ef87412ae120f995e7e64ea4b3fc35705ab490c53b2b83b90"
+    r = _write(
+        OWNER_ACCOUNT,
+        "add_baseline_evidence",
+        [handover_id, "WEB_RENDERED_INSPECTION", fixture_url, baseline_hash, [component_id], "SINGLE_PUBLIC_SOURCE", "", "", ""],
+    )
+    assert _leader_status_return(r), r
+
     r = _write("offset-bob", "accept_baseline", [handover_id])
     assert _leader_status_return(r), r
 
     r = _write(OWNER_ACCOUNT, "begin_custody", [handover_id])
     assert _leader_status_return(r), r
 
-    fixture_url = (
+    return_url = (
         "https://raw.githubusercontent.com/Chinny070/handover-protocol-"
-        "/main/fixtures/vehicle_baseline_bumper.txt"
+        "/main/fixtures/vehicle_return_bumper_damaged.txt"
     )
+    return_hash = "afee1f3209d339f908ca0cb486f010ecc8044b690ad25b00243844cbf51ee8a8"
     # submit_return_evidence requires the *current custodian*
     # (handover.to_party == offset-bob here), not the owner -- the same
     # authorization rule proven in tests/direct/test_handover_authorization.py.
     r = _write(
         "offset-bob",
         "submit_return_evidence",
-        [handover_id, "WEB_RENDERED_INSPECTION", fixture_url, "x", [component_id], "SELF_REPORTED"],
+        [handover_id, "WEB_RENDERED_INSPECTION", return_url, return_hash, [component_id], "SINGLE_PUBLIC_SOURCE", "", "", ""],
     )
     assert _leader_status_return(r), r
 
@@ -175,3 +219,16 @@ def test_full_funded_write_lifecycle(read_client):
     )
     assert handover["handover_id"] == handover_id
     assert handover["status"] in ("RETURN_CLEAR", "DEFECTS_RECORDED", "INCONCLUSIVE", "EVIDENCE_UNAVAILABLE")
+    certificate = read_client.read_contract(
+        address=CANONICAL_ADDRESS, function_name="get_condition_certificate", args=[asset_id]
+    )
+    assert certificate["certificate_status"] != "CLEAR" or handover["status"] == "RETURN_CLEAR"
+    print("LIVE_LIFECYCLE_EVIDENCE=" + json.dumps({
+        "asset_id": asset_id,
+        "component_id": component_id,
+        "handover_id": handover_id,
+        "handover_status": handover["status"],
+        "certificate_status": certificate["certificate_status"],
+        "defects": asset.get("defect_ids", []),
+        "transactions": LIVE_TXS,
+    }, sort_keys=True))

@@ -21,7 +21,8 @@ import sys
 from pathlib import Path
 
 CONTRACT_PATH = Path(__file__).resolve().parents[1] / "contracts" / "handover_protocol.py"
-DEFAULT_ADDRESS = "0x54953F416c4Dc8B80559bb877870Cf636431c658"  # canonical Studionet deployment
+DEFAULT_ADDRESS = "0xB0F0509f35846481622d6A3dEcA0601618FFfC34"  # latest finalized Studionet deployment
+STUDIONET_RPC = "https://studio.genlayer.com/api"
 
 
 def _extract_source(cli_output: str) -> str:
@@ -50,7 +51,7 @@ def main() -> int:
     address = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_ADDRESS
 
     genlayer_cli = shutil.which("genlayer") or "genlayer"
-    cmd = [genlayer_cli, "code", address]
+    cmd = [genlayer_cli, "code", address, "--rpc", STUDIONET_RPC]
     proc = subprocess.run(
         " ".join(cmd) if sys.platform == "win32" else cmd,
         capture_output=True,

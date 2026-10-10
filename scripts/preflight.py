@@ -36,9 +36,9 @@ def check_forbidden_nondeterminism(tree: ast.Module) -> list[str]:
 
 def check_header(text: str) -> list[str]:
     problems = []
-    first_line = text.splitlines()[0] if text else ""
-    if '"Depends"' not in first_line:
-        problems.append("missing GenVM dependency header comment on line 1")
+    header = "\n".join(text.splitlines()[:3])
+    if '"Depends"' not in header:
+        problems.append("missing GenVM dependency header comment in the contract header")
     return problems
 
 

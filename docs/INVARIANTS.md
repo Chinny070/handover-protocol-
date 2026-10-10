@@ -3,13 +3,8 @@
 These invariants are binding on `contracts/handover_protocol.py`. Every
 invariant below is covered by at least one test in `tests/direct/`.
 
-**HP1 — Baseline Immutability.**
-Once a handover's baseline is `ACCEPTED`, its component graph snapshot,
-existing-defect snapshot, condition digest, evidence digest, and the
-normal-wear/handover policy hash bound to it can never be rewritten.
-Enforced by: acceptance writes a frozen `BaselineRecord`; every later
-write path that would touch these fields is rejected once
-`status != BASELINE_PROPOSED`.
+**HP1 � Evidence-backed Baseline Immutability.**
+Acceptance requires digest-bound evidence covering every scoped component and freezes each evidence ID, URL, kind, and SHA-256 digest in `baseline_snapshot_json`. Return evaluation independently re-fetches baseline and return records and fails closed if either digest does not match. Semantic comparison happens at return time; acceptance alone does not claim a verified physical condition.
 
 **HP2 — Custody Continuity.**
 No two `ACTIVE` primary custody intervals may exist for the same asset
@@ -50,10 +45,7 @@ matching to an existing defect is expressed as a *relation classification*
 contract — not the model — picks the concrete ID to attach the finding to.
 
 **HP8 — Defect History Immutability.**
-A defect's lifecycle events (`OPEN`, `WORSENED`, `REPAIR_CLAIMED`,
-`REPAIRED`, `PARTIALLY_REPAIRED`, `NOT_REPAIRED`, `UNRESOLVED`) are
-appended to a bounded history list and never deleted or overwritten, even
-when the defect is later closed.
+A defect's lifecycle events are appended and never deleted or overwritten. At the fixed bound, new events are rejected rather than silently truncating prior provenance.
 
 **HP9 — Temporal Attribution Honesty.**
 Attribution classes (`PRE_EXISTING`, `FIRST_OBSERVED_IN_INTERVAL`,

@@ -10,7 +10,7 @@ silently become sufficient evidence for a CRITICAL finding."""
 
 from gltest.direct import create_address
 
-from _helpers import make_sealed_asset, renter_address, finding, sign_as_inspector
+from _helpers import make_sealed_asset, renter_address, finding, sign_as_inspector, attach_test_baseline
 
 
 def _handover_through_return(
@@ -20,6 +20,7 @@ def _handover_through_return(
 ):
     hid = c.propose_handover(asset_id=aid, to_party=custodian.as_hex, scope_component_ids=[cid])
     vm.sender = custodian
+    attach_test_baseline(c, vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
     vm.mock_web(url.split("//", 1)[-1], {"status": 200, "body": web_body})
@@ -104,6 +105,7 @@ def test_unknown_assurance_tier_is_rejected_at_submission(direct_vm):
     cid = comps["bumper"]
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -122,7 +124,7 @@ def test_missing_policy_coverage_for_severity_fails_closed(direct_vm):
     """If the frozen policy doesn't specify evidence_minimums for a given
     severity bucket at all, that must fail closed (never implicitly accept)."""
     import json
-    from _helpers import deploy
+    from _helpers import deploy, attach_test_baseline
 
     owner = create_address("owner")
     direct_vm.sender = owner
@@ -134,7 +136,7 @@ def test_missing_policy_coverage_for_severity_fails_closed(direct_vm):
         "wear_budget": {},
         "evidence_minimums": {"minor": ["SELF_REPORTED"]},  # no "major" entry at all
         "attribution_minimums": {},
-        "repair_closure_requirements": {},
+        "repair_closure_requirements": {"require_receipt": True},
         "challenge_window": 3,
     }
     c.seal_asset_definition(asset_id=aid, policy_json=json.dumps(policy))
@@ -163,6 +165,7 @@ def test_signed_inspection_without_signature_is_rejected_at_submission(direct_vm
     renter = renter_address("renter")
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -190,6 +193,7 @@ def test_signed_inspection_with_untrusted_key_is_rejected(direct_vm):
     renter = renter_address("renter")
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -224,6 +228,7 @@ def test_signed_inspection_signature_cannot_be_replayed_onto_different_evidence(
     renter = renter_address("renter")
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
 
@@ -247,7 +252,7 @@ def test_signed_inspection_signature_cannot_be_replayed_onto_different_evidence(
 
 def test_malformed_trusted_inspector_pubkey_rejected_at_seal(direct_vm):
     import json
-    from _helpers import deploy
+    from _helpers import deploy, attach_test_baseline
 
     owner = create_address("owner")
     direct_vm.sender = owner
@@ -259,7 +264,7 @@ def test_malformed_trusted_inspector_pubkey_rejected_at_seal(direct_vm):
         "wear_budget": {},
         "evidence_minimums": {"minor": ["SELF_REPORTED"]},
         "attribution_minimums": {},
-        "repair_closure_requirements": {},
+        "repair_closure_requirements": {"require_receipt": True},
         "challenge_window": 3,
         "trusted_inspectors": ["not-a-real-pubkey"],
     }

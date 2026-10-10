@@ -31,15 +31,20 @@ def sign_as_inspector(evidence_kind: str, source_url: str, content_hash: str):
 
 
 DEFAULT_POLICY = {
-    "component_rules": {"bumper": "cosmetic", "engine": "functional"},
+    "component_rules": {"bumper": "cosmetic"},
     "wear_budget": {"scuff_mm": 5, "scratch_count": 2},
     "evidence_minimums": {
         "minor": ["SELF_REPORTED"],
         "major": ["SELF_REPORTED", "SIGNED_INSPECTION"],
         "critical": ["SIGNED_INSPECTION"],
     },
-    "attribution_minimums": {"supported": ["WEB_RENDERED_INSPECTION"]},
-    "repair_closure_requirements": {"receipt": True},
+    "attribution_minimums": {
+        "FIRST_OBSERVED_IN_INTERVAL": ["SELF_REPORTED", "SIGNED_INSPECTION"],
+        "SUPPORTED_AS_NEW_IN_INTERVAL": ["SELF_REPORTED", "SIGNED_INSPECTION"],
+        "WORSENED_IN_INTERVAL": ["SELF_REPORTED", "SIGNED_INSPECTION"],
+        "CONTINUATION_OF_PRIOR_DEFECT": ["SELF_REPORTED", "SIGNED_INSPECTION"],
+    },
+    "repair_closure_requirements": {"require_receipt": True},
     "challenge_window": 3,
     "trusted_inspectors": [TEST_INSPECTOR_PUBKEY_HEX],
 }
@@ -99,3 +104,37 @@ def finding(**overrides) -> str:
 def mock_clear_evidence(vm, url="https://example.com/inspect"):
     vm.mock_web(url.split("//", 1)[-1], {"status": 200, "body": "No visible change."})
     vm.mock_llm(".*", finding())
+
+
+def attach_test_baseline(contract, vm, handover_id):
+    """Submit deterministic, digest-bound baseline evidence for each scoped
+    component in Direct Mode lifecycle tests. Kept explicit at each
+    acceptance site so tests cannot accidentally bypass the baseline gate."""
+    import json as _json
+
+    handover = contract.handovers[handover_id]
+    previous_sender = vm.sender
+    vm.sender = handover.from_party
+    covered = set()
+    for eid in _json.loads(handover.baseline_evidence_ids_json or "[]"):
+        ev = contract.evidence[eid]
+        covered.update(_json.loads(ev.component_ids_json))
+    body = "Baseline inspection: no damage observed."
+    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+    for eid in _json.loads(handover.baseline_evidence_ids_json or "[]"):
+        ev = contract.evidence[eid]
+        vm.mock_web(ev.source_url.split("//", 1)[-1], {"status": 200, "body": body})
+    for cid in _json.loads(handover.scope_json):
+        if cid in covered:
+            continue
+        url = f"https://example.com/baseline/{handover_id}/{cid}"
+        vm.mock_web(f"example.com/baseline/{handover_id}/{cid}", {"status": 200, "body": body})
+        contract.add_baseline_evidence(
+            handover_id=handover_id,
+            evidence_kind="WEB_RENDERED_INSPECTION",
+            source_url=url,
+            content_hash=digest,
+            component_ids=[cid],
+            assurance_tier="SELF_REPORTED",
+        )
+    vm.sender = previous_sender

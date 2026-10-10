@@ -15,7 +15,7 @@ prove the independent validator rejects a leader that:
 
 from gltest.direct import create_address
 
-from _helpers import make_sealed_asset, renter_address, finding
+from _helpers import make_sealed_asset, renter_address, finding, attach_test_baseline
 
 
 def _start_return_pending(direct_vm):
@@ -25,6 +25,7 @@ def _start_return_pending(direct_vm):
     renter = renter_address("renter")
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
     c.accept_baseline(handover_id=hid)
     c.begin_custody(handover_id=hid)
     return c, aid, cid, hid, renter
@@ -103,7 +104,7 @@ def test_forged_leader_claims_repaired_when_no_evidence_is_rejected(direct_vm):
     did = c.get_asset(asset_id=aid)["defect_ids"][0]
 
     c.submit_repair(
-        defect_id=did, evidence_kind="REPAIR_RECEIPT", source_url="https://unreachable.example/receipt", content_hash="r"
+        defect_id=did, evidence_kind="REPAIR_RECEIPT", source_url="https://unreachable.example/receipt", content_hash="0000000000000000000000000000000000000000000000000000000000000000"
     )
     # Validator independently cannot fetch the receipt -> its honest answer
     # is EXTERNAL_FAILURE. A forged leader claiming REPAIRED must be rejected.
@@ -291,9 +292,11 @@ def test_forged_leader_matches_wrong_candidate_defect_is_rejected(direct_vm):
     direct_vm.sender = create_address("owner")
     hid2 = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid2)
     c.accept_baseline(handover_id=hid2)
     c.begin_custody(handover_id=hid2)
     direct_vm.clear_mocks()
+    attach_test_baseline(c, direct_vm, hid2)
     direct_vm.mock_web("example.com/inspect2", {"status": 200, "body": "Separate fresh dent elsewhere."})
     direct_vm.mock_llm(
         ".*",
@@ -322,9 +325,11 @@ def test_forged_leader_matches_wrong_candidate_defect_is_rejected(direct_vm):
     direct_vm.sender = create_address("owner")
     hid3 = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
     direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid3)
     c.accept_baseline(handover_id=hid3)
     c.begin_custody(handover_id=hid3)
     direct_vm.clear_mocks()
+    attach_test_baseline(c, direct_vm, hid3)
     direct_vm.mock_web("example.com/inspect3", {"status": 200, "body": "The scuff is now a deep gouge."})
     direct_vm.mock_llm(
         ".*",
