@@ -15,7 +15,7 @@ Verified for this candidate:
 - The deployment transaction reached `FINALIZED` with `MAJORITY_AGREE`; the five recorded validator votes were AGREE.
 - `genlayer schema 0xB0F0509f35846481622d6A3dEcA0601618FFfC34` returned the contract ABI (28 public methods).
 - `python scripts/source_parity.py 0xB0F0509f35846481622d6A3dEcA0601618FFfC34` returned PASS, byte-for-byte after line-ending normalization.
-- Direct Mode: 77 passed. The repository-wide run before the latest integration-test rewrite was 77 passed, 5 skipped; rerun is required before release.
+- Repository-wide pytest: 77 passed, 3 skipped (the three skipped tests require Studionet RPC access unavailable during the final run).
 - `python scripts/preflight.py` passed static checks. A dedicated GenVM lint command was not available in the installed CLI; deployment itself compiled and executed the constructor successfully.
 
 The live write lifecycle is **not verified**. Funded write attempts returned transaction hashes but the required follow-up `FINALIZED` receipt queries repeatedly timed out against the Studionet RPC. No condition-delta, defect, repair, challenge, or custody-gap live lifecycle is claimed for this deployment. A known non-finalized write must be checked by its hash before any retry. Historical lifecycle entries below describe the prior `0x54953F416c4Dc8B80559bb877870Cf636431c658` deployment only; they are not evidence for this candidate's new baseline-comparison or certificate logic.
