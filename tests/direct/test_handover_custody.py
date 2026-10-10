@@ -116,6 +116,17 @@ def test_unknown_gap_state_rejected(direct_vm):
         c.mark_custody_gap(handover_id=hid, gap_state="SOMETHING_ELSE")
 
 
+def test_custody_gap_cannot_be_recorded_before_custody_starts(direct_vm):
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    renter = renter_address("renter")
+    hid = c.propose_handover(
+        asset_id=aid, to_party=renter.as_hex, scope_component_ids=[comps["bumper"]]
+    )
+    with direct_vm.expect_revert("custody gap can only be recorded after custody begins"):
+        c.mark_custody_gap(handover_id=hid, gap_state="CUSTODY_GAP")
+
+
 def test_custody_gap_history_is_append_only_and_not_erasable(direct_vm):
     """A party cannot silently erase an earlier gap report by later
     overwriting handover.custody_gap with NO_GAP -- the original report
@@ -126,6 +137,8 @@ def test_custody_gap_history_is_append_only_and_not_erasable(direct_vm):
     cid = comps["bumper"]
     renter = renter_address("renter")
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
+
+    _accept_and_begin(c, direct_vm, hid, renter)
 
     c.mark_custody_gap(handover_id=hid, gap_state="CUSTODY_GAP")
     direct_vm.sender = renter

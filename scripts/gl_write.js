@@ -55,15 +55,10 @@ async function main() {
     args,
     value: 0n,
   });
-  console.log("Write Transaction Hash:", hash);
-
-  // A write can reach ACCEPTED well before it is FINALIZED. Release evidence
-  // and integration assertions must wait for final fee settlement and the
-  // terminal transaction state, not stop at the consensus decision.
-  const receipt = await client.waitForTransactionReceipt({
-    hash, status: "FINALIZED", retries: 120, interval: 5000,
-  });
-  console.log(JSON.stringify(receipt, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 2));
+  // Return the hash immediately. The Python lifecycle harness persists it
+  // before polling finality, so a transient receipt RPC failure cannot hide
+  // an already-submitted non-idempotent write.
+  console.log(JSON.stringify({ tx_id: hash }));
 }
 
 main().catch((err) => {

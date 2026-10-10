@@ -272,3 +272,4 @@ def test_challenge_with_unreachable_evidence_is_external_failure_not_overturned(
     assert result == "EXTERNAL_FAILURE"
     defect = c.get_defect(defect_id=did)
     assert defect["status"] == "OPEN"  # unchanged
+    assert defect["challenge_count"] == 0  # unavailable evidence does not burn a challenge round

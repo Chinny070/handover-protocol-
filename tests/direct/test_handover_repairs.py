@@ -31,6 +31,10 @@ def _create_open_defect(c, vm, aid, cid, renter):
     )
     c.evaluate_return(handover_id=hid)
     vm.clear_mocks()
+    # Repair adjudication must re-fetch the observation that created the
+    # defect as well as the receipt, so the receipt can be matched to the
+    # actual recorded damage rather than judged in isolation.
+    vm.mock_web("example.com/inspect", {"status": 200, "body": "Dent."})
     return c.get_asset(asset_id=aid)["defect_ids"][0]
 
 
@@ -149,4 +153,30 @@ def test_submit_repair_requires_open_defect(direct_vm):
     with direct_vm.expect_revert("not open for repair"):
         c.submit_repair(
             defect_id=did, evidence_kind="REPAIR_RECEIPT", source_url="https://example.com/receipt", content_hash="0000000000000000000000000000000000000000000000000000000000000000"
+        )
+
+
+def test_resolved_defect_cannot_be_challenged(direct_vm):
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    renter = renter_address("renter")
+    did = _create_open_defect(c, direct_vm, aid, comps["bumper"], renter)
+
+    c.submit_repair(
+        defect_id=did,
+        evidence_kind="REPAIR_RECEIPT",
+        source_url="https://example.com/receipt",
+        content_hash="16694f382e9f2cba2ef9b99a9a31c31af074ca99d6171d335d2bf245446e561d",
+    )
+    direct_vm.mock_web("example.com/receipt", {"status": 200, "body": "Repaired."})
+    direct_vm.mock_llm(".*", '{"repair_result": "REPAIRED"}')
+    assert c.verify_repair(defect_id=did) == "REPAIRED"
+
+    with direct_vm.expect_revert("only an unresolved defect finding may be challenged"):
+        c.challenge_finding(
+            defect_id=did,
+            reason_code="WRONG_SEVERITY",
+            evidence_kind="STRUCTURED_CHECKLIST",
+            source_url="https://example.com/challenge",
+            content_hash="hc",
         )

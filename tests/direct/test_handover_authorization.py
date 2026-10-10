@@ -11,7 +11,7 @@ one legitimate party is accepted, for every affected method."""
 
 from gltest.direct import create_address
 
-from _helpers import make_sealed_asset, renter_address, mock_clear_evidence, finding, attach_test_baseline
+from _helpers import make_sealed_asset, renter_address, mock_clear_evidence, finding, attach_test_baseline, deploy, default_policy_json
 
 
 def _sealed_asset_and_stranger(vm):
@@ -31,6 +31,29 @@ def test_propose_handover_primary_requires_owner(direct_vm):
     direct_vm.sender = owner
     hid = c.propose_handover(asset_id=aid, to_party=stranger.as_hex, scope_component_ids=[cid])
     assert hid == "H1"
+
+
+def test_component_graph_and_policy_mutations_require_asset_owner(direct_vm):
+    owner = create_address("graph-owner")
+    stranger = renter_address("graph-stranger")
+    direct_vm.sender = owner
+    c = deploy(direct_vm)
+    aid = c.register_asset(name="Owner mutation matrix")
+
+    direct_vm.sender = stranger
+    with direct_vm.expect_revert("caller is not asset owner"):
+        c.add_component(asset_id=aid, parent_id="", name="bumper")
+
+    direct_vm.sender = owner
+    cid = c.add_component(asset_id=aid, parent_id="", name="bumper")
+    assert cid
+
+    direct_vm.sender = stranger
+    with direct_vm.expect_revert("caller is not asset owner"):
+        c.seal_asset_definition(asset_id=aid, policy_json=default_policy_json())
+
+    direct_vm.sender = owner
+    assert c.seal_asset_definition(asset_id=aid, policy_json=default_policy_json())
 
 
 def test_delegate_custody_requires_current_custodian(direct_vm):
@@ -144,6 +167,10 @@ def test_mark_custody_gap_requires_handover_party(direct_vm):
     renter = renter_address("renter")
     direct_vm.sender = owner
     hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
+    direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
+    c.accept_baseline(handover_id=hid)
+    c.begin_custody(handover_id=hid)
 
     direct_vm.sender = stranger
     with direct_vm.expect_revert("caller is not a party to this handover"):
@@ -263,6 +290,7 @@ def test_verify_repair_requires_defect_party(direct_vm):
     )
 
     direct_vm.clear_mocks()
+    direct_vm.mock_web("example.com/inspect", {"status": 200, "body": "Dent."})
     direct_vm.mock_web("example.com/receipt", {"status": 200, "body": "Repaired."})
     direct_vm.mock_llm(".*", '{"repair_result": "REPAIRED"}')
 
