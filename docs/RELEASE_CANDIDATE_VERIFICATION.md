@@ -1,34 +1,33 @@
-# RELEASE_CANDIDATE_VERIFICATION.md
+# Release Candidate Verification
 
-## Current candidate
+## Canonical deployment
 
-Current candidate address: [0xB0F0509f35846481622d6A3dEcA0601618FFfC34](https://explorer-studio.genlayer.com/address/0xB0F0509f35846481622d6A3dEcA0601618FFfC34)
+- Contract: [0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C](https://explorer-studio.genlayer.com/address/0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C)
+- Deployment transaction: [0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c](https://explorer-studio.genlayer.com/tx/0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c)
+- Source commit: `f48ea0d`; normalized source SHA-256: `3c8637329f0ab0d4c341a5bf266690777fa2d10f8fb4f8de85fdb640c9c12957`.
+- Deployment finalized with `MAJORITY_AGREE` (3 AGREE, 2 IDLE); current schema query succeeded and source parity passed.
 
-Deployment transaction: [0xb6fb9266ed849ae415eccca365d1e1725f5cc8eca5791166e4e2fe14c943ce3c](https://explorer-studio.genlayer.com/tx/0xb6fb9266ed849ae415eccca365d1e1725f5cc8eca5791166e4e2fe14c943ce3c)
+## Test and live verification
 
-The deployment receipt was `FINALIZED`, `MAJORITY_AGREE`, with five AGREE votes. The GenLayer CLI returned the 28-method schema. `python scripts/source_parity.py 0xB0F0509f35846481622d6A3dEcA0601618FFfC34` returned PASS against the local contract source; normalized source SHA-256: `7ac07ae241c43ae8685f053e2f261f312e1994637010b588a4bcebe58883b0bf`.
+- Repository suite after the adversarial fixes: **80 passed, 3 skipped**.
+- Funded lifecycle against the canonical deployment: **1 passed**. It finalized the asset/handover writes, submitted and adjudicated return evidence, verified a repair, rejected a post-repair challenge, and independently read back the handover, defect/repair, and certificate state. Per-action transaction hashes and receipt votes are in [`LIVE_LIFECYCLE_TRANSACTIONS.jsonl`](LIVE_LIFECYCLE_TRANSACTIONS.jsonl) and summarized in [`DEPLOYMENT.md`](DEPLOYMENT.md).
+- `python scripts/preflight.py`: PASS (static checks only).
+- Deployed source parity: PASS, byte-for-byte after line-ending normalization.
+- No standalone GenVM lint command or hosted CI result is claimed; local preflight explicitly requires a running node for full runtime schema validation. The funded test and schema query supply live runtime evidence for this candidate.
 
-## Local checks
+## Adversarial review performed
 
-- Baseline Direct Mode before the final integration-file edits: **77 passed**.
-- Full default suite before the latest integration-file edits: **77 passed, 5 skipped**. The final repository-wide run after the latest integration-file edits completed: **77 passed, 3 skipped**. The three skipped tests require Studionet RPC access unavailable in the current environment.
-- `python scripts/preflight.py`: PASS (static check only).
-- `python -m py_compile contracts/handover_protocol.py tests/direct/*.py`: PASS.
-- Deployment compiled and the constructor executed successfully. No separate GenVM lint/typecheck command was located in the installed GenLayer CLI.
-- No repository CI workflow was found in the cloned checkout; hosted CI status has not been verified.
+The implementation and direct tests were reviewed against authorization, lifecycle, evidence-integrity, and resolution attacks. The covered controls include owner-only primary handover origination; party- and lifecycle-scoped return, evaluation, gap, challenge, repair, and close writes; component/handover scope validation; strict digest verification for well-formed SHA-256 commitments; trusted-inspector signatures over the exact evidence tuple; evidence-to-policy binding; and repair adjudication that re-fetches the originating observation together with the repair receipt. External evidence failure fails closed and does not consume a challenge round. A resolved finding cannot be reopened by a post-repair challenge. Custody gaps cannot be asserted before custody begins.
 
-## Live write lifecycle: not verified
+Full details are in `tests/direct/test_handover_authorization.py`, `test_handover_custody.py`, `test_handover_defects.py`, `test_handover_repairs.py`, and related Direct Mode tests. A separate outside reviewer/steward was not run; this is an implementation-level adversarial pass, not an independent third-party audit.
 
-The funded integration test was attempted. It submitted writes, but later receipt calls failed or timed out before `FINALIZED` could be verified. One observed transaction hash was `0x272efa848bf84b51948038f7de5dec3c0fe435a2d76679af922fd8734481e9d0`; its final status was not verified. Do not treat it or any unfinalized write as proof of state transition. The integration harness now waits for `FINALIZED` and does not resubmit when a hash is known, but Studionet RPC availability prevented completion.
+## Remaining release limitations
 
-No current-candidate evidence is claimed for condition-delta classification, defect lineage, normal-wear/inconclusive outcomes, custody-gap resolution, delegation, repair, challenge, or final clearance. Prior deployment tables in `docs/DEPLOYMENT.md` are historical.
+- The challenge window is bounded by rounds, not wall-clock time.
+- Custody-gap history remains party-updatable under its authorization/lifecycle rules; independent resolution evidence is not implemented as an append-only adjudication mechanism.
+- High-assurance inspector signing is supported for trusted inspectors. Other declared source-quality tiers are not cryptographically attested.
+- SHA-256 comparison is enforced only when the submitted digest has the required strict format; other fixture digests are treated as unverified commitments.
+- No image/vision evidence is load-bearing. No claim is made that the current GenLayer runtime can fetch and consistently adjudicate image bytes.
+- The live lifecycle exercises the canonical success/repair/rejection path. It does not by itself demonstrate every delegation, custody-gap, protocol-disagreement, or unavailable-evidence branch on this deployment.
 
-## Release gates still open
-
-1. Complete a funded lifecycle and independently read back all required states using finalized transaction receipts.
-2. Finish fixes for repair evidence comparison with the original defect, a verifiable custody-gap resolution path, challenge timing semantics, and sustainable append-only defect history.
-3. Complete adversarial tests for these exact paths; rerun the full suite.
-4. Run GenVM lint/type/schema/runtime validation and any repository CI available for the final commit.
-5. Complete the rejection-oriented review, commit and push the corrected source/docs, then verify deployed-source parity against that committed source.
-
-Historical verification performed against `0x54953F416c4Dc8B80559bb877870Cf636431c658` is not evidence for this candidate's changes.
+These facts support a verified release candidate, but not a claim that every optional hardening or every live branch is complete. See [`SECURITY.md`](../SECURITY.md) and [`DEPLOYMENT.md`](DEPLOYMENT.md) for threat assumptions and exact transaction evidence.

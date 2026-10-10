@@ -1,6 +1,6 @@
 # Handover Protocol
 
-**Release status: not submission-ready.** The current Studionet candidate and its verified deployment facts are recorded in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). The funded write lifecycle and several release gates remain unverified; historical deployment evidence is explicitly separated from the current candidate.
+**Release status: canonical Studionet deployment and funded lifecycle verified.** The canonical contract, deployment receipt, live lifecycle transactions, and remaining release limitations are recorded in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) and [`docs/RELEASE_CANDIDATE_VERIFICATION.md`](docs/RELEASE_CANDIDATE_VERIFICATION.md).
 
 **Consensus-backed condition and custody certificates for physical
 assets.**

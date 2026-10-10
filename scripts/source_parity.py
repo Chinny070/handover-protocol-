@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 CONTRACT_PATH = Path(__file__).resolve().parents[1] / "contracts" / "handover_protocol.py"
-DEFAULT_ADDRESS = "0xB0F0509f35846481622d6A3dEcA0601618FFfC34"  # latest finalized Studionet deployment
+DEFAULT_ADDRESS = "0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C"  # latest finalized Studionet deployment
 STUDIONET_RPC = "https://studio.genlayer.com/api"
 
 

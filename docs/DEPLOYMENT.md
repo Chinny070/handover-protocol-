@@ -1,26 +1,33 @@
 # DEPLOYMENT.md
 
-## Status: fresh contract deployed; release lifecycle is incomplete
+## Status: canonical Studionet deployment and funded lifecycle verified
 
-**Canonical candidate address:** `0xB0F0509f35846481622d6A3dEcA0601618FFfC34`
-**Deployment transaction:** `0xb6fb9266ed849ae415eccca365d1e1725f5cc8eca5791166e4e2fe14c943ce3c`
-**Network:** GenLayer Studio Network (`studionet`, chain ID `61999`)
-**Explorer contract:** [0xB0F0509f35846481622d6A3dEcA0601618FFfC34](https://explorer-studio.genlayer.com/address/0xB0F0509f35846481622d6A3dEcA0601618FFfC34)
-**Explorer deployment transaction:** [0xb6fb9266ed849ae415eccca365d1e1725f5cc8eca5791166e4e2fe14c943ce3c](https://explorer-studio.genlayer.com/tx/0xb6fb9266ed849ae415eccca365d1e1725f5cc8eca5791166e4e2fe14c943ce3c)
-**Deployer:** `0xaffE15eEc45b68835cc9E5B4Ab85dD5deaE8e70b` (`my-studionet-wallet`)
-**Normalized deployed-source SHA-256:** `7ac07ae241c43ae8685f053e2f261f312e1994637010b588a4bcebe58883b0bf`
+**Canonical contract:** [0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C](https://explorer-studio.genlayer.com/address/0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C)
 
-Verified for this candidate:
+**Deployment transaction:** [0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c](https://explorer-studio.genlayer.com/tx/0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c)
 
-- The deployment transaction reached `FINALIZED` with `MAJORITY_AGREE`; the five recorded validator votes were AGREE.
-- `genlayer schema 0xB0F0509f35846481622d6A3dEcA0601618FFfC34` returned the contract ABI (28 public methods).
-- `python scripts/source_parity.py 0xB0F0509f35846481622d6A3dEcA0601618FFfC34` returned PASS, byte-for-byte after line-ending normalization.
-- Repository-wide pytest: 77 passed, 3 skipped (the three skipped tests require Studionet RPC access unavailable during the final run).
-- `python scripts/preflight.py` passed static checks. A dedicated GenVM lint command was not available in the installed CLI; deployment itself compiled and executed the constructor successfully.
+**Network:** GenLayer Studionet, chain ID `61999`
 
-The live write lifecycle is **not verified**. Funded write attempts returned transaction hashes but the required follow-up `FINALIZED` receipt queries repeatedly timed out against the Studionet RPC. No condition-delta, defect, repair, challenge, or custody-gap live lifecycle is claimed for this deployment. A known non-finalized write must be checked by its hash before any retry. Historical lifecycle entries below describe the prior `0x54953F416c4Dc8B80559bb877870Cf636431c658` deployment only; they are not evidence for this candidate's new baseline-comparison or certificate logic.
+**Source commit:** `f48ea0d`
+**Normalized deployed-source SHA-256:** `3c8637329f0ab0d4c341a5bf266690777fa2d10f8fb4f8de85fdb640c9c12957`
 
-The candidate is not submission-ready while the live lifecycle, full adversarial reviewer pass, repository CI, final documentation review, and push of the tested source commit remain outstanding. The application-side CLI write helper now waits for `FINALIZED` instead of stopping at `ACCEPTED`.
+Deployment finalized with `MAJORITY_AGREE` (3 AGREE, 2 IDLE). The live schema query succeeded and source parity passed byte-for-byte after line-ending normalization. The funded integration lifecycle passed on this exact deployment and independently read back asset, handover, repair, and certificate state. The test result was `1 passed`; its writes and finalized receipts are recorded in [`LIVE_LIFECYCLE_TRANSACTIONS.jsonl`](LIVE_LIFECYCLE_TRANSACTIONS.jsonl).
+
+Verified lifecycle transaction hashes for asset `A1`, component `C1`, and handover `H1`:
+
+| Action | Transaction | Result |
+|---|---|---|
+| Register asset | [0x04416703f27f42c0fd2dcba2394d6a51ccf13b4e80452e2760356fcc33bcb4f4](https://explorer-studio.genlayer.com/tx/0x04416703f27f42c0fd2dcba2394d6a51ccf13b4e80452e2760356fcc33bcb4f4) | FINALIZED, MAJORITY_AGREE |
+| Add component | [0xc05336858ab6e05cb3c999986a84625960b174431549b5024dbda82899a98e5d](https://explorer-studio.genlayer.com/tx/0xc05336858ab6e05cb3c999986a84625960b174431549b5024dbda82899a98e5d) | FINALIZED, MAJORITY_AGREE |
+| Seal asset policy | [0x9bfef8ff06e3c00bf07bd819ddcf3e9bb79e0c64ace8d26e91018724453d08ac](https://explorer-studio.genlayer.com/tx/0x9bfef8ff06e3c00bf07bd819ddcf3e9bb79e0c64ace8d26e91018724453d08ac) | FINALIZED, MAJORITY_AGREE |
+| Propose handover | [0x9886b7a5eb9f4a4cd1e70b656b05565d9e6846cb3118ccad5a35d569b33a461a](https://explorer-studio.genlayer.com/tx/0x9886b7a5eb9f4a4cd1e70b656b05565d9e6846cb3118ccad5a35d569b33a461a) | FINALIZED, MAJORITY_AGREE |
+| Submit return evidence | [0xc454b7849aa6a998437a1a293b3d71eae5aed19ada7661dd05f728259d015b66](https://explorer-studio.genlayer.com/tx/0xc454b7849aa6a998437a1a293b3d71eae5aed19ada7661dd05f728259d015b66) | FINALIZED, MAJORITY_AGREE |
+| Evaluate return | [0x7d7af8c01293bf92b74354114a582b6f8faa014d61664321b2dfb0a6301be213](https://explorer-studio.genlayer.com/tx/0x7d7af8c01293bf92b74354114a582b6f8faa014d61664321b2dfb0a6301be213) | FINALIZED, MAJORITY_AGREE |
+| Submit repair | [0x8f46f0f633c09d3fb90a16061e7a29da4c6ebbd3e4b9afcce4d091cb7daef586](https://explorer-studio.genlayer.com/tx/0x8f46f0f633c09d3fb90a16061e7a29da4c6ebbd3e4b9afcce4d091cb7daef586) | FINALIZED, MAJORITY_AGREE |
+| Verify repair | [0x4b8605f4103342057d2e5954131b5c63129233d14b8dd2eb6be8960768a51de6](https://explorer-studio.genlayer.com/tx/0x4b8605f4103342057d2e5954131b5c63129233d14b8dd2eb6be8960768a51de6) | FINALIZED, MAJORITY_AGREE |
+| Post-repair challenge attempt | [0xa94f3e1392f0212403b1c7e269f9b415c584b1ed616f5aafe81cf699f2f42ab8](https://explorer-studio.genlayer.com/tx/0xa94f3e1392f0212403b1c7e269f9b415c584b1ed616f5aafe81cf699f2f42ab8) | finalized execution rejected; no successful return |
+
+The local check report at this revision is `80 passed, 3 skipped`; static preflight passed. The skipped cases are environment-gated network integration cases, and the funded write lifecycle above is separately verified. No dedicated standalone GenVM lint command or hosted CI result is claimed. A prior deployment demonstrated a valid challenge overturn; the current canonical lifecycle specifically proves repair and rejection of a challenge against a resolved finding. See the transaction ledger for receipts and validator votes.
 
 ## Historical deployment evidence
 

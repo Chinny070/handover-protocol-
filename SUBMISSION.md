@@ -1,33 +1,17 @@
-# SUBMISSION.md
+# Submission Summary
 
-## Title
+Handover Protocol is a GenLayer Intelligent Contract for consensus-backed physical condition handovers. It freezes an accepted condition baseline, records custody intervals and defect lineage, classifies evidence-backed changes under a frozen normal-wear policy, verifies repairs, and exposes a portable condition certificate. Custody attribution is temporal and evidence-scoped; it does not assert legal causation.
 
-**Handover Protocol — condition and custody evidence for physical assets**
+## Verified candidate
 
-## Portal one-liner
+- Studionet contract: [0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C](https://explorer-studio.genlayer.com/address/0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C)
+- Deployment transaction: [0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c](https://explorer-studio.genlayer.com/tx/0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c)
+- Source commit: `f48ea0d`; deployed-source parity was verified.
+- Funded Studionet lifecycle: passed, with finalized receipts and independent state readback. Exact actions and hashes are recorded in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) and [`docs/LIVE_LIFECYCLE_TRANSACTIONS.jsonl`](docs/LIVE_LIFECYCLE_TRANSACTIONS.jsonl).
+- Local suite: 80 passed, 3 skipped; static preflight passed.
 
-A GenLayer Intelligent Contract that freezes digest-bound baseline evidence, compares it with return evidence, tracks custody and defect lineage, and issues lifecycle-aware condition certificates without asserting legal causation.
+## Security and verification boundaries
 
-## Current release status
+The Direct Mode suite covers adversarial write authorization, evidence integrity, custody-gap lifecycle checks, unresolved-challenge behavior, repair comparison with the originating observation, and rejection of challenges against repaired findings. Trusted inspector signatures and strict-format SHA-256 digest checks are implemented. Consensus disagreements and unavailable external evidence fail closed; no vision/image path is claimed.
 
-**Not submission-ready.** A fresh candidate was deployed to Studionet at [`0xB0F0509f35846481622d6A3dEcA0601618FFfC34`](https://explorer-studio.genlayer.com/address/0xB0F0509f35846481622d6A3dEcA0601618FFfC34). Its deployment transaction finalized with five agreeing validators and local deployed-source parity passed. The required funded lifecycle did not complete: Studionet RPC receipt queries timed out after writes returned transaction hashes. No live condition delta, defect lineage, repair, challenge, gap resolution, or final certificate claim is made for this candidate. See `docs/DEPLOYMENT.md`.
-
-## What has been verified locally
-
-- Baseline acceptance requires SHA-256-bound evidence for every component in scope and freezes the evidence references and digests.
-- Return assessment independently retrieves the accepted baseline and return observations; changed or unavailable bytes fail closed.
-- Premature certificates do not report `CLEAR`; recorded custody gaps cannot be cleared through a unilateral `NO_GAP` write.
-- Frozen policy schema validation and enforcement now cover evidence assurance, attribution evidence minimums, repair receipt requirements, and challenge-round limits.
-- Direct Mode: **77 passed**. Repository-wide default suite before the latest integration-test rewrite: **77 passed, 5 skipped**. A fresh full-suite run remains required.
-- Static preflight passed; the fresh deployment compiled and successfully executed its constructor; schema and deployed-source parity checks passed.
-
-## Remaining release gates
-
-- Finish and independently read back the funded Studionet write lifecycle, then record only finalized transactions and their validator outcomes.
-- Resolve the remaining design gaps in challenge timing, independent custody-gap resolution, repair comparison against original defect evidence, and sustainable append-only defect history.
-- Run GenVM lint/type/schema/runtime checks and the repository CI on the final commit.
-- Complete the rejection-oriented adversarial review, update all docs to that exact source commit, push it, and re-check parity.
-
-## Explicit limitations
-
-No image/vision verification, legal causation, physical truth, commercial agreement, or repair authenticity is claimed. Accessible HTTPS content is not by itself an attestation. The older lifecycle evidence in `docs/DEPLOYMENT.md` belongs to superseded deployments and is not proof for the current candidate.
+This candidate has a live verified lifecycle and source parity. It has not received a separate third-party audit, hosted CI is not claimed, and there is no standalone GenVM lint result. Remaining boundaries include round-based challenge timing, custody-gap history semantics, and incomplete live coverage of every optional branch. Details: [`docs/RELEASE_CANDIDATE_VERIFICATION.md`](docs/RELEASE_CANDIDATE_VERIFICATION.md) and [`SECURITY.md`](SECURITY.md).

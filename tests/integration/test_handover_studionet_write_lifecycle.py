@@ -32,7 +32,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GL_WRITE = REPO_ROOT / "scripts" / "gl_write.js"
-CANONICAL_ADDRESS = "0x3B73F78ea53fC0669216aF3859295a2E3504Da1b"
+CANONICAL_ADDRESS = "0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C"
 OWNER_ACCOUNT = "my-studionet-wallet"
 RENTER_ADDRESS = "0x10b091a7b19d3f0da511a06985a8636fa58a0377"  # offset-bob
 
