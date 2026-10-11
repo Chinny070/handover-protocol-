@@ -1,6 +1,6 @@
 # Handover Protocol
 
-**Release status: steward corrections implemented; redeployment pending.** The existing Studionet deployment and lifecycle are verified for the previous source. The current source adds steward-requested adversarial corrections and passes 89 Direct Mode tests; it must be redeployed and parity-checked before resubmission. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) and [`docs/RELEASE_CANDIDATE_VERIFICATION.md`](docs/RELEASE_CANDIDATE_VERIFICATION.md).
+**Release status: steward corrections deployed and verified.** The corrected Studionet contract, source parity, funded lifecycle and adversarial tests are documented in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) and [`docs/RELEASE_CANDIDATE_VERIFICATION.md`](docs/RELEASE_CANDIDATE_VERIFICATION.md).
 
 **Consensus-backed condition and custody certificates for physical
 assets.**
@@ -156,7 +156,7 @@ web/LLM/consensus logic of their own: `docs/INTEGRATION.md`.
 
 ## Verification
 
-The previously deployed contract and its funded lifecycle are verified, but they predate the steward-requested fixes in the current source. The corrected source has **89 passed, 3 skipped** in the full repository suite and a passing static preflight; it is not yet deployed, so do not represent the older address as containing these changes. Redeployment and parity verification are pending signer unlock. See `docs/DEPLOYMENT.md` and `docs/RELEASE_CANDIDATE_VERIFICATION.md` for exact boundaries and evidence.
+The corrected source is deployed at the canonical address in `docs/DEPLOYMENT.md`; deployed-source parity and a funded lifecycle passed. The full suite reports **89 passed, 3 skipped** and static preflight passed. No standalone GenVM lint command or hosted CI result is claimed. High-assurance signatures are checked against frozen trusted inspector keys; strict SHA-256 content hashes are checked against fetched bytes.
 
 The funded write test is opt-in because it submits real transactions:
 

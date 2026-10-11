@@ -1,41 +1,38 @@
 # DEPLOYMENT.md
 
-## Status: previous deployment verified; steward correction redeployment pending
+## Status: steward corrections deployed and lifecycle verified
 
-The verified address below is the previous source revision. The steward-requested
-tuple-validation, custody-gap attribution, and `MODIFIED` handling corrections
-are implemented and pass the updated Direct Mode suite, but are **not deployed
-yet**. The CLI could not unlock the existing signer because no password was
-available and no private key is cached in the OS keychain. Do not treat the
-previous address as proof of the corrected source. Deploy, verify parity, and
-append the new transaction evidence before resubmitting.
+**Canonical contract:** [0xe53a4b3cEd2B20397F9E749c3D445C0116269599](https://explorer-studio.genlayer.com/address/0xe53a4b3cEd2B20397F9E749c3D445C0116269599)
 
-**Canonical contract:** [0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C](https://explorer-studio.genlayer.com/address/0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C)
-
-**Deployment transaction:** [0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c](https://explorer-studio.genlayer.com/tx/0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c)
+**Deployment transaction:** [0x839bca16fabdb14ab4821c72b66b5ea4062ff511ac65f94b24ea7f020a0fc101](https://explorer-studio.genlayer.com/tx/0x839bca16fabdb14ab4821c72b66b5ea4062ff511ac65f94b24ea7f020a0fc101)
 
 **Network:** GenLayer Studionet, chain ID `61999`
 
-**Source commit:** `f48ea0d`
-**Normalized deployed-source SHA-256:** `3c8637329f0ab0d4c341a5bf266690777fa2d10f8fb4f8de85fdb640c9c12957`
+**Contract source commit:** `20b67dc`
 
-Deployment finalized with `MAJORITY_AGREE` (3 AGREE, 2 IDLE). The live schema query succeeded and source parity passed byte-for-byte after line-ending normalization. The funded integration lifecycle passed on this exact deployment and independently read back asset, handover, repair, and certificate state. The test result was `1 passed`; its writes and finalized receipts are recorded in [`LIVE_LIFECYCLE_TRANSACTIONS.jsonl`](LIVE_LIFECYCLE_TRANSACTIONS.jsonl).
+**Normalized deployed-source SHA-256:** `b4749cee7d642f13da9daa1863295610ef54268ef681825d839006fc6eb992d9`
 
-Verified lifecycle transaction hashes for asset `A1`, component `C1`, and handover `H1`:
+Deployment finalized with `MAJORITY_AGREE` (3 AGREE, 2 IDLE). `genlayer schema` succeeded, and `python scripts/source_parity.py 0xe53a4b3cEd2B20397F9E749c3D445C0116269599` passed byte-for-byte after line-ending normalization.
+
+The funded lifecycle passed against this corrected deployment: `1 passed in 581.57s`. The independent final readback was asset `A1`, component `C1`, handover `H1`, checkpoint `CP1`, defect `D1`. Return adjudication recorded `DEFECTS_RECORDED`; repair adjudication left `D1` as `REPAIRED`; the post-repair challenge did not successfully return; the final certificate was `CLEAR` with zero open/unresolved defects and no custody gap. Exact hashes and validator votes are in [`LIVE_LIFECYCLE_TRANSACTIONS.jsonl`](LIVE_LIFECYCLE_TRANSACTIONS.jsonl).
 
 | Action | Transaction | Result |
 |---|---|---|
-| Register asset | [0x04416703f27f42c0fd2dcba2394d6a51ccf13b4e80452e2760356fcc33bcb4f4](https://explorer-studio.genlayer.com/tx/0x04416703f27f42c0fd2dcba2394d6a51ccf13b4e80452e2760356fcc33bcb4f4) | FINALIZED, MAJORITY_AGREE |
-| Add component | [0xc05336858ab6e05cb3c999986a84625960b174431549b5024dbda82899a98e5d](https://explorer-studio.genlayer.com/tx/0xc05336858ab6e05cb3c999986a84625960b174431549b5024dbda82899a98e5d) | FINALIZED, MAJORITY_AGREE |
-| Seal asset policy | [0x9bfef8ff06e3c00bf07bd819ddcf3e9bb79e0c64ace8d26e91018724453d08ac](https://explorer-studio.genlayer.com/tx/0x9bfef8ff06e3c00bf07bd819ddcf3e9bb79e0c64ace8d26e91018724453d08ac) | FINALIZED, MAJORITY_AGREE |
-| Propose handover | [0x9886b7a5eb9f4a4cd1e70b656b05565d9e6846cb3118ccad5a35d569b33a461a](https://explorer-studio.genlayer.com/tx/0x9886b7a5eb9f4a4cd1e70b656b05565d9e6846cb3118ccad5a35d569b33a461a) | FINALIZED, MAJORITY_AGREE |
-| Submit return evidence | [0xc454b7849aa6a998437a1a293b3d71eae5aed19ada7661dd05f728259d015b66](https://explorer-studio.genlayer.com/tx/0xc454b7849aa6a998437a1a293b3d71eae5aed19ada7661dd05f728259d015b66) | FINALIZED, MAJORITY_AGREE |
-| Evaluate return | [0x7d7af8c01293bf92b74354114a582b6f8faa014d61664321b2dfb0a6301be213](https://explorer-studio.genlayer.com/tx/0x7d7af8c01293bf92b74354114a582b6f8faa014d61664321b2dfb0a6301be213) | FINALIZED, MAJORITY_AGREE |
-| Submit repair | [0x8f46f0f633c09d3fb90a16061e7a29da4c6ebbd3e4b9afcce4d091cb7daef586](https://explorer-studio.genlayer.com/tx/0x8f46f0f633c09d3fb90a16061e7a29da4c6ebbd3e4b9afcce4d091cb7daef586) | FINALIZED, MAJORITY_AGREE |
-| Verify repair | [0x4b8605f4103342057d2e5954131b5c63129233d14b8dd2eb6be8960768a51de6](https://explorer-studio.genlayer.com/tx/0x4b8605f4103342057d2e5954131b5c63129233d14b8dd2eb6be8960768a51de6) | FINALIZED, MAJORITY_AGREE |
-| Post-repair challenge attempt | [0xa94f3e1392f0212403b1c7e269f9b415c584b1ed616f5aafe81cf699f2f42ab8](https://explorer-studio.genlayer.com/tx/0xa94f3e1392f0212403b1c7e269f9b415c584b1ed616f5aafe81cf699f2f42ab8) | finalized execution rejected; no successful return |
+| Deploy corrected contract | [0x839bca16fabdb14ab4821c72b66b5ea4062ff511ac65f94b24ea7f020a0fc101](https://explorer-studio.genlayer.com/tx/0x839bca16fabdb14ab4821c72b66b5ea4062ff511ac65f94b24ea7f020a0fc101) | FINALIZED, MAJORITY_AGREE |
+| Register asset A1 | [0x8d9438548e15e7c57b12121c205bbc6b6ea00345f8d00b9a3fd6e67ce9f5abde](https://explorer-studio.genlayer.com/tx/0x8d9438548e15e7c57b12121c205bbc6b6ea00345f8d00b9a3fd6e67ce9f5abde) | FINALIZED, MAJORITY_AGREE |
+| Add component C1 | [0xd6242a9b2d76e8485f498078330712547c25ba36670d528d51645f5501193b83](https://explorer-studio.genlayer.com/tx/0xd6242a9b2d76e8485f498078330712547c25ba36670d528d51645f5501193b83) | FINALIZED, MAJORITY_AGREE |
+| Seal asset policy | [0x50e7139ba655312f24f337a8acae2b839adf3830d486a2b29781370b36a110b7](https://explorer-studio.genlayer.com/tx/0x50e7139ba655312f24f337a8acae2b839adf3830d486a2b29781370b36a110b7) | FINALIZED, MAJORITY_AGREE |
+| Propose handover H1 | [0x6c5f6f4ff70ded4ed79fe95250f867671a3cf2120525bb0639566788c6ed29c9](https://explorer-studio.genlayer.com/tx/0x6c5f6f4ff70ded4ed79fe95250f867671a3cf2120525bb0639566788c6ed29c9) | FINALIZED, MAJORITY_AGREE |
+| Submit baseline evidence | [0x71f29e0c7d8f4465758cf94982b3ca74f8ab331b65e0aa202b83a3c2fbeda64a](https://explorer-studio.genlayer.com/tx/0x71f29e0c7d8f4465758cf94982b3ca74f8ab331b65e0aa202b83a3c2fbeda64a) | FINALIZED, MAJORITY_AGREE |
+| Accept baseline | [0x5eb2a89ef252589f2f83ec4edd4ffc7624acc614caf831d9fdfdcafaead603ca](https://explorer-studio.genlayer.com/tx/0x5eb2a89ef252589f2f83ec4edd4ffc7624acc614caf831d9fdfdcafaead603ca) | FINALIZED, MAJORITY_AGREE |
+| Begin custody | [0x9b2ba67ddb8e773124ff68a259cde8479a1d1fe6b0f475da627fd59779fd61a0](https://explorer-studio.genlayer.com/tx/0x9b2ba67ddb8e773124ff68a259cde8479a1d1fe6b0f475da627fd59779fd61a0) | FINALIZED, MAJORITY_AGREE |
+| Submit return evidence | [0x2a9e1975053aa38b603a3f8b6a669fb7458a9664bd4deb4e828fa166bc9941e6](https://explorer-studio.genlayer.com/tx/0x2a9e1975053aa38b603a3f8b6a669fb7458a9664bd4deb4e828fa166bc9941e6) | FINALIZED, MAJORITY_AGREE |
+| Evaluate return | [0x7c636667610197b4a2c9adece49806ef51f9dbea4c282707993cf96cf51deb4a](https://explorer-studio.genlayer.com/tx/0x7c636667610197b4a2c9adece49806ef51f9dbea4c282707993cf96cf51deb4a) | FINALIZED, MAJORITY_AGREE |
+| Submit repair | [0xb1abfb9824960d4fe819c70a69ac796b6393563354cae6abb16c41711198c174](https://explorer-studio.genlayer.com/tx/0xb1abfb9824960d4fe819c70a69ac796b6393563354cae6abb16c41711198c174) | FINALIZED, MAJORITY_AGREE |
+| Verify repair | [0xe2106170ae7ccdc5fc484b69f4df3c3311182d830eea9d1cf87277933cb5f6d7](https://explorer-studio.genlayer.com/tx/0xe2106170ae7ccdc5fc484b69f4df3c3311182d830eea9d1cf87277933cb5f6d7) | FINALIZED, MAJORITY_AGREE |
+| Post-repair challenge | [0x600bfaeedae69be12c45d931e7aa2f684e2ba6c18d84efb27f757a0cc3977bf7](https://explorer-studio.genlayer.com/tx/0x600bfaeedae69be12c45d931e7aa2f684e2ba6c18d84efb27f757a0cc3977bf7) | FINALIZED; test verified no successful return; defect remains REPAIRED |
 
-The local check report at this revision is `80 passed, 3 skipped`; static preflight passed. The skipped cases are environment-gated network integration cases, and the funded write lifecycle above is separately verified. No dedicated standalone GenVM lint command or hosted CI result is claimed. A prior deployment demonstrated a valid challenge overturn; the current canonical lifecycle specifically proves repair and rejection of a challenge against a resolved finding. See the transaction ledger for receipts and validator votes.
+Current corrected-source checks: `89 passed, 3 skipped`; static preflight passed. No standalone GenVM lint command or hosted CI result is claimed. Earlier deployment records below are historical and do not supersede this canonical address.
 
 ## Historical deployment evidence
 

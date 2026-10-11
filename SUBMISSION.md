@@ -4,11 +4,11 @@ Handover Protocol is a GenLayer Intelligent Contract for consensus-backed physic
 
 ## Previous deployment and corrected source status
 
-- Studionet contract: [0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C](https://explorer-studio.genlayer.com/address/0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C)
-- Deployment transaction: [0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c](https://explorer-studio.genlayer.com/tx/0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c)
-- The address above and its funded lifecycle correspond to the prior source commit `f48ea0d`; its deployed-source parity and lifecycle were verified.
-- Current working source includes the steward-requested tuple consistency checks, deterministic custody-gap attribution, and fail-closed `MODIFIED` challenge handling; full suite: 89 passed, 3 skipped.
-- **Corrected source redeployment is pending signer unlock.** The previous contract must not be represented as containing the current corrections. Updated deployment and verification status is in [`docs/RELEASE_CANDIDATE_VERIFICATION.md`](docs/RELEASE_CANDIDATE_VERIFICATION.md).
+- Studionet contract: [0xe53a4b3cEd2B20397F9E749c3D445C0116269599](https://explorer-studio.genlayer.com/address/0xe53a4b3cEd2B20397F9E749c3D445C0116269599)
+- Deployment transaction: [0x839bca16fabdb14ab4821c72b66b5ea4062ff511ac65f94b24ea7f020a0fc101](https://explorer-studio.genlayer.com/tx/0x839bca16fabdb14ab4821c72b66b5ea4062ff511ac65f94b24ea7f020a0fc101)
+- Deployed source commit: `20b67dc`; source parity passed.
+- Corrected funded lifecycle passed, including return adjudication, repair verification, rejection of a post-repair challenge, and final condition-certificate readback.
+- Full suite: 89 passed, 3 skipped; static preflight passed.
 
 ## Security and verification boundaries
 
