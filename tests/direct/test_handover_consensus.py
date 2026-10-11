@@ -225,7 +225,7 @@ def test_forged_leader_claims_attribution_despite_custody_gap(direct_vm):
             condition_class="NEW_MINOR_DAMAGE",
             defect_relation="NEW_DISTINCT_DEFECT",
             severity="MINOR",
-            attribution_class="CUSTODY_GAP",
+            attribution_class="SUPPORTED_AS_NEW_IN_INTERVAL",  # must be downgraded deterministically
         ),
     )
     c.submit_return_evidence(
@@ -236,7 +236,12 @@ def test_forged_leader_claims_attribution_despite_custody_gap(direct_vm):
         component_ids=[cid],
         assurance_tier="SELF_REPORTED",
     )
-    c.evaluate_return(handover_id=hid)
+    status = c.evaluate_return(handover_id=hid)
+    assert status == "DEFECTS_RECORDED"
+    defect_id = c.get_asset(asset_id=aid)["defect_ids"][0]
+    # The recorded gap, not the model's stronger interval attribution,
+    # determines the persisted lineage class.
+    assert c.get_defect(defect_id=defect_id)["origin_class"] == "CUSTODY_GAP"
 
     forged = [
         {

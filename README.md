@@ -1,6 +1,6 @@
 # Handover Protocol
 
-**Release status: canonical Studionet deployment and funded lifecycle verified.** The canonical contract, deployment receipt, live lifecycle transactions, and remaining release limitations are recorded in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) and [`docs/RELEASE_CANDIDATE_VERIFICATION.md`](docs/RELEASE_CANDIDATE_VERIFICATION.md).
+**Release status: steward corrections implemented; redeployment pending.** The existing Studionet deployment and lifecycle are verified for the previous source. The current source adds steward-requested adversarial corrections and passes 89 Direct Mode tests; it must be redeployed and parity-checked before resubmission. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) and [`docs/RELEASE_CANDIDATE_VERIFICATION.md`](docs/RELEASE_CANDIDATE_VERIFICATION.md).
 
 **Consensus-backed condition and custody certificates for physical
 assets.**
@@ -156,9 +156,7 @@ web/LLM/consensus logic of their own: `docs/INTEGRATION.md`.
 
 ## Verification
 
-The current candidate is deployed, but it is **not release verified**. The deployment receipt and deployed-source parity were checked; the funded write lifecycle against this candidate did not reach a verified final state because Studionet receipt polling timed out. Historical lifecycle records below describe older deployments only. See `docs/DEPLOYMENT.md` and `docs/RELEASE_CANDIDATE_VERIFICATION.md` for exact addresses, hashes, checks, and open gates.
-
-Latest local results before the current final rerun: Direct Mode 77 passed; the full suite and network integrations require rerunning. `scripts/preflight.py` and Python compilation passed. The installed CLI exposed deployment/schema validation but no separate GenVM lint command. High-assurance signatures are checked against frozen trusted inspector keys; strict SHA-256 content hashes are checked against fetched bytes. These properties are not represented as live lifecycle proof for the current deployment.
+The previously deployed contract and its funded lifecycle are verified, but they predate the steward-requested fixes in the current source. The corrected source has **89 passed, 3 skipped** in the full repository suite and a passing static preflight; it is not yet deployed, so do not represent the older address as containing these changes. Redeployment and parity verification are pending signer unlock. See `docs/DEPLOYMENT.md` and `docs/RELEASE_CANDIDATE_VERIFICATION.md` for exact boundaries and evidence.
 
 The funded write test is opt-in because it submits real transactions:
 

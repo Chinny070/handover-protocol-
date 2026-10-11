@@ -64,9 +64,32 @@ state by itself — only a typed, schema-validated, independently-agreed
 finding can (`test_prompt_injection_text_is_only_data_not_authority`).
 
 **Tampered / stale / reused evidence.** `content_hash` is recorded per
-evidence item for downstream tamper-evidence tooling; this release does
-not itself re-verify `content_hash` against live fetched content (see
-Limitations).
+evidence item. When it is a strict 64-character hexadecimal SHA-256 value,
+the contract verifies fetched bytes against that digest; malformed or
+placeholder hashes remain explicitly unverified. Trusted-inspector
+signatures bind the declared kind, URL and content hash and are checked
+against the asset's frozen trusted-key policy.
+
+**Inconsistent semantic tuples.** Every finding is checked as a complete
+tuple before state mutation. For example, `NEW_MAJOR_DAMAGE` cannot carry
+`MINOR` severity, `normal_wear=true`, a pre-existing attribution, or a
+`SAME_DEFECT` relation without a valid matched ID. An external failure must
+be `UNAVAILABLE` with no severity or defect match. Malformed tuples become
+`INCONCLUSIVE`; the contract validates the full result set before applying
+any finding, checkpoint, or defect-history mutation.
+
+**Custody-gap attribution.** If the active handover has a recorded gap in
+its current state or append-only history, deterministic contract logic
+downgrades interval-specific model attribution to `CUSTODY_GAP` before
+validator comparison and defect-lineage mutation. Inspection text cannot
+override this state. The contract records temporal uncertainty; it does
+not determine legal causation.
+
+**Partial challenge result.** `MODIFIED` is not accepted because the
+challenge interface has no structured corrected severity, relation, or
+attribution payload to persist. It normalizes to `INCONCLUSIVE`; the
+finding and its history remain unchanged. `UPHELD` and `OVERTURNED` remain
+validator-bound results.
 
 **Wrong-asset/wrong-scope evidence.** Evidence is always submitted
 against a specific `handover_id`/`component_ids`, scoped to one asset;

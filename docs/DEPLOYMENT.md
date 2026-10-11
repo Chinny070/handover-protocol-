@@ -1,6 +1,14 @@
 # DEPLOYMENT.md
 
-## Status: canonical Studionet deployment and funded lifecycle verified
+## Status: previous deployment verified; steward correction redeployment pending
+
+The verified address below is the previous source revision. The steward-requested
+tuple-validation, custody-gap attribution, and `MODIFIED` handling corrections
+are implemented and pass the updated Direct Mode suite, but are **not deployed
+yet**. The CLI could not unlock the existing signer because no password was
+available and no private key is cached in the OS keychain. Do not treat the
+previous address as proof of the corrected source. Deploy, verify parity, and
+append the new transaction evidence before resubmitting.
 
 **Canonical contract:** [0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C](https://explorer-studio.genlayer.com/address/0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C)
 

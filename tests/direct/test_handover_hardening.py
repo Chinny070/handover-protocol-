@@ -9,6 +9,7 @@ response, never executed)."""
 
 import json
 import sys
+import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "contracts"))
@@ -96,6 +97,70 @@ def test_truthy_string_for_bool_fails_closed(direct_vm):
     bad["normal_wear"] = "true"  # string, not bool
     result = _normalize(direct_vm, bad)
     assert result["condition_class"] == "INCONCLUSIVE"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"condition_class": "NEW_MAJOR_DAMAGE", "severity": "MINOR"},
+        {"condition_class": "NEW_MINOR_DAMAGE", "normal_wear": True},
+        {"condition_class": "NORMAL_WEAR", "normal_wear": False, "severity": "NONE"},
+        {"condition_class": "UNAVAILABLE", "external_failure": False},
+        {"condition_class": "NEW_MINOR_DAMAGE", "defect_relation": "SAME_DEFECT"},
+        {"condition_class": "NEW_MINOR_DAMAGE", "attribution_class": "PRE_EXISTING"},
+        {
+            "condition_class": "WORSENED_EXISTING_DEFECT",
+            "severity": "MAJOR",
+            "defect_relation": "NEW_DISTINCT_DEFECT",
+            "attribution_class": "WORSENED_IN_INTERVAL",
+        },
+    ],
+)
+def test_inconsistent_finding_tuples_fail_closed(direct_vm, overrides):
+    bad = dict(VALID)
+    bad.update(overrides)
+    result = _normalize(direct_vm, bad)
+    assert result["condition_class"] == "INCONCLUSIVE"
+    assert result["defect_relation"] == "INSUFFICIENT_EVIDENCE"
+    assert result["severity"] == "NONE"
+    assert result["attribution_class"] == "INSUFFICIENT_EVIDENCE"
+
+
+def test_damage_claim_with_insufficient_evidence_is_not_mutated(direct_vm):
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    cid = comps["bumper"]
+    renter = renter_address("renter")
+    hid = c.propose_handover(asset_id=aid, to_party=renter.as_hex, scope_component_ids=[cid])
+    direct_vm.sender = renter
+    attach_test_baseline(c, direct_vm, hid)
+    c.accept_baseline(handover_id=hid)
+    c.begin_custody(handover_id=hid)
+    direct_vm.mock_web(
+        "example.com/inspect",
+        {"status": 200, "body": "A mark is visible, but severity is not established."},
+    )
+    direct_vm.mock_llm(
+        ".*",
+        finding(
+            condition_class="NEW_MAJOR_DAMAGE",
+            defect_relation="NEW_DISTINCT_DEFECT",
+            severity="MAJOR",
+            evidence_sufficient=False,
+            attribution_class="SUPPORTED_AS_NEW_IN_INTERVAL",
+        ),
+    )
+    c.submit_return_evidence(
+        handover_id=hid,
+        evidence_kind="WEB_RENDERED_INSPECTION",
+        source_url="https://example.com/inspect",
+        content_hash="h",
+        component_ids=[cid],
+        assurance_tier="SELF_REPORTED",
+    )
+    status = c.evaluate_return(handover_id=hid)
+    assert status == "INCONCLUSIVE"
+    assert c.get_asset(asset_id=aid)["defect_ids"] == []
 
 
 def test_int_for_bool_fails_closed(direct_vm):

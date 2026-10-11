@@ -2,13 +2,13 @@
 
 Handover Protocol is a GenLayer Intelligent Contract for consensus-backed physical condition handovers. It freezes an accepted condition baseline, records custody intervals and defect lineage, classifies evidence-backed changes under a frozen normal-wear policy, verifies repairs, and exposes a portable condition certificate. Custody attribution is temporal and evidence-scoped; it does not assert legal causation.
 
-## Verified candidate
+## Previous deployment and corrected source status
 
 - Studionet contract: [0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C](https://explorer-studio.genlayer.com/address/0xEC5EcdCd93DFf54c0752628Eed0B51F51417222C)
 - Deployment transaction: [0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c](https://explorer-studio.genlayer.com/tx/0xffcd5a8409041b78a12465633636be4c21c2256f818f1503a0415431842a058c)
-- Source commit: `f48ea0d`; deployed-source parity was verified.
-- Funded Studionet lifecycle: passed, with finalized receipts and independent state readback. Exact actions and hashes are recorded in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) and [`docs/LIVE_LIFECYCLE_TRANSACTIONS.jsonl`](docs/LIVE_LIFECYCLE_TRANSACTIONS.jsonl).
-- Local suite: 80 passed, 3 skipped; static preflight passed.
+- The address above and its funded lifecycle correspond to the prior source commit `f48ea0d`; its deployed-source parity and lifecycle were verified.
+- Current working source includes the steward-requested tuple consistency checks, deterministic custody-gap attribution, and fail-closed `MODIFIED` challenge handling; full suite: 89 passed, 3 skipped.
+- **Corrected source redeployment is pending signer unlock.** The previous contract must not be represented as containing the current corrections. Updated deployment and verification status is in [`docs/RELEASE_CANDIDATE_VERIFICATION.md`](docs/RELEASE_CANDIDATE_VERIFICATION.md).
 
 ## Security and verification boundaries
 

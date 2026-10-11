@@ -78,7 +78,7 @@ REPAIR_RESULTS = {
     "EXTERNAL_FAILURE",
 }
 
-CHALLENGE_RESULTS = {"UPHELD", "MODIFIED", "OVERTURNED", "INCONCLUSIVE", "EXTERNAL_FAILURE"}
+CHALLENGE_RESULTS = {"UPHELD", "OVERTURNED", "INCONCLUSIVE", "EXTERNAL_FAILURE"}
 
 CHALLENGE_REASONS = {
     "WRONG_DEFECT_MATCH",
@@ -1019,6 +1019,29 @@ class HandoverProtocol(gl.Contract):
                 evidence_tiers_by_component.setdefault(cid, []).append(ev.assurance_tier)
                 evidence_hashes_by_component.setdefault(cid, []).append(ev.content_hash)
 
+        gap_history = self._json_list(handover.custody_gap_history_json)
+        custody_gap_recorded = handover.custody_gap in ("PARTIAL_GAP", "CUSTODY_GAP", "UNKNOWN") or any(
+            event.get("gap_state") in ("PARTIAL_GAP", "CUSTODY_GAP", "UNKNOWN")
+            for event in gap_history
+        )
+
+        def classify_component(cid, urls, candidate_ids, component_policy, hashes, baseline_urls, baseline_hashes):
+            finding = _classify_component(
+                cid, urls, candidate_ids, component_policy, hashes, baseline_urls, baseline_hashes
+            )
+            if custody_gap_recorded and finding.get("attribution_class") in {
+                "FIRST_OBSERVED_IN_INTERVAL",
+                "SUPPORTED_AS_NEW_IN_INTERVAL",
+                "WORSENED_IN_INTERVAL",
+                "CONTINUATION_OF_PRIOR_DEFECT",
+            }:
+                # A gap in the custody chain makes interval-specific
+                # attribution unavailable. Apply this deterministically
+                # before validator comparison and before any graph mutation.
+                finding = dict(finding)
+                finding["attribution_class"] = "CUSTODY_GAP"
+            return finding
+
         # Read the immutable accepted baseline snapshot separately. Every
         # observation used in the comparison is fetched and hash-checked;
         # a missing or changed baseline is an unavailable assessment.
@@ -1038,7 +1061,7 @@ class HandoverProtocol(gl.Contract):
                 candidate_ids = candidates_by_component.get(cid, [])
                 component_policy = dict(policy)
                 component_policy["_component_rule"] = policy["component_rules"].get(self.components[cid].name, "")
-                finding = _classify_component(
+                finding = classify_component(
                     cid, urls, candidate_ids, component_policy, hashes,
                     baseline_urls_by_component.get(cid, []),
                     baseline_hashes_by_component.get(cid, []),
@@ -1062,7 +1085,7 @@ class HandoverProtocol(gl.Contract):
                 candidate_ids = candidates_by_component.get(cid, [])
                 component_policy = dict(policy)
                 component_policy["_component_rule"] = policy["component_rules"].get(self.components[cid].name, "")
-                my_findings.append(_classify_component(
+                my_findings.append(classify_component(
                     cid, urls, candidate_ids, component_policy, hashes,
                     baseline_urls_by_component.get(cid, []),
                     baseline_hashes_by_component.get(cid, []),
@@ -1141,6 +1164,18 @@ class HandoverProtocol(gl.Contract):
         any_inconclusive = False
         any_unavailable = False
 
+        # Validate the entire result set before mutating any defect, history,
+        # checkpoint, or handover state. Consensus output is untrusted input.
+        expected_scope = self._json_list(handover.scope_json)
+        finding_scope = [f.get("component_id") if isinstance(f, dict) else None for f in findings]
+        if (
+            len(findings) != len(expected_scope)
+            or set(finding_scope) != set(expected_scope)
+            or len(set(finding_scope)) != len(finding_scope)
+            or not all(_validate_finding_semantics(f) for f in findings)
+        ):
+            raise Exception("consensus findings contain an inconsistent tuple; no state applied")
+
         for f in findings:
             cid = f["component_id"]
             cond = f["condition_class"]
@@ -1182,6 +1217,13 @@ class HandoverProtocol(gl.Contract):
                 # silently accepting a self-reported note as sufficient
                 # for a MAJOR/CRITICAL finding, and rather than silently
                 # dropping the finding as if nothing changed.
+                any_inconclusive = True
+                continue
+
+            if cond in (
+                "NEW_MINOR_DAMAGE", "NEW_MAJOR_DAMAGE", "NEW_CRITICAL_DAMAGE",
+                "WORSENED_EXISTING_DEFECT",
+            ) and not f["evidence_sufficient"]:
                 any_inconclusive = True
                 continue
 
@@ -1315,7 +1357,8 @@ class HandoverProtocol(gl.Contract):
         retrievable evidence. Fresh validators independently re-fetch
         this evidence and re-classify (section 24) -- the challenge
         reason alone, without evidence, can only ever reach INCONCLUSIVE
-        (see _classify_challenge), never UPHELD/MODIFIED/OVERTURNED."""
+        (see _classify_challenge), never UPHELD/OVERTURNED without
+        validator agreement."""
         if defect_id not in self.defects:
             raise Exception("unknown defect")
         if reason_code not in CHALLENGE_REASONS:
@@ -1379,9 +1422,7 @@ class HandoverProtocol(gl.Contract):
         if result == "OVERTURNED":
             self._append_defect_event(defect_id, "UNRESOLVED", "", "INSUFFICIENT_EVIDENCE")
             d.status = "UNRESOLVED"
-        elif result == "MODIFIED":
-            self._append_defect_event(defect_id, d.status, "", d.origin_class)
-        # UPHELD / INCONCLUSIVE / EXTERNAL_FAILURE: no state mutation beyond the counter
+        # UPHELD / INCONCLUSIVE / EXTERNAL_FAILURE: no defect state mutation.
         return result
 
     # ------------------------------------------------------------------
@@ -1936,7 +1977,7 @@ def _normalize_component_finding(raw, component_id: str, candidate_defect_ids: l
         if isinstance(code, bool) or not isinstance(code, int):
             return fail(20)
 
-    return {
+    finding = {
         "component_id": component_id,
         "condition_class": cond,
         "defect_relation": relation,
@@ -1948,6 +1989,97 @@ def _normalize_component_finding(raw, component_id: str, candidate_defect_ids: l
         "matched_defect_id": matched_id,
         "rationale_codes": rationale,
     }
+    if not _validate_finding_semantics(finding):
+        return fail(21)
+    return finding
+
+
+def _validate_finding_semantics(finding: dict) -> bool:
+    """Enforce cross-field invariants before a consensus finding can
+    affect persistent state."""
+    if not isinstance(finding, dict):
+        return False
+    cond = finding.get("condition_class")
+    relation = finding.get("defect_relation")
+    severity = finding.get("severity")
+    normal_wear = finding.get("normal_wear")
+    sufficient = finding.get("evidence_sufficient")
+    external_failure = finding.get("external_failure")
+    attribution = finding.get("attribution_class")
+    matched_id = finding.get("matched_defect_id", "")
+
+    if cond not in CONDITION_CLASSES or relation not in DEFECT_RELATIONS or severity not in SEVERITIES:
+        return False
+    if attribution not in ATTRIBUTION_CLASSES or not isinstance(matched_id, str):
+        return False
+    if not all(isinstance(flag, bool) for flag in (normal_wear, sufficient, external_failure)):
+        return False
+
+    if external_failure:
+        return (
+            cond == "UNAVAILABLE" and relation == "INSUFFICIENT_EVIDENCE"
+            and severity == "NONE" and not normal_wear and not sufficient
+            and attribution in ("EXTERNAL_FAILURE", "INSUFFICIENT_EVIDENCE")
+            and matched_id == ""
+        )
+    if cond == "UNAVAILABLE":
+        return False
+    if cond == "INCONCLUSIVE":
+        return (
+            relation == "INSUFFICIENT_EVIDENCE" and severity == "NONE"
+            and not normal_wear and attribution == "INSUFFICIENT_EVIDENCE"
+            and matched_id == ""
+        )
+
+    damage_classes = {
+        "NEW_MINOR_DAMAGE", "NEW_MAJOR_DAMAGE", "NEW_CRITICAL_DAMAGE",
+        "WORSENED_EXISTING_DEFECT",
+    }
+    if cond in damage_classes:
+        expected = {
+            "NEW_MINOR_DAMAGE": "MINOR",
+            "NEW_MAJOR_DAMAGE": "MAJOR",
+            "NEW_CRITICAL_DAMAGE": "CRITICAL",
+        }.get(cond)
+        if (expected and severity != expected) or severity == "NONE" or normal_wear:
+            return False
+        if cond == "WORSENED_EXISTING_DEFECT":
+            return (
+                relation in ("SAME_DEFECT", "LIKELY_SAME_DEFECT") and matched_id != ""
+                and attribution in {
+                    "WORSENED_IN_INTERVAL", "CONTINUATION_OF_PRIOR_DEFECT",
+                    "CUSTODY_GAP", "UNKNOWN_ORIGIN", "INSUFFICIENT_EVIDENCE",
+                }
+            )
+        return (
+            relation == "NEW_DISTINCT_DEFECT" and matched_id == ""
+            and attribution in {
+                "FIRST_OBSERVED_IN_INTERVAL", "SUPPORTED_AS_NEW_IN_INTERVAL",
+                "CUSTODY_GAP", "UNKNOWN_ORIGIN", "INSUFFICIENT_EVIDENCE",
+            }
+        )
+
+    if severity != "NONE" or external_failure or normal_wear != (cond == "NORMAL_WEAR"):
+        return False
+    if cond == "PRE_EXISTING_DEFECT":
+        if relation not in ("INSUFFICIENT_EVIDENCE", "SAME_DEFECT", "LIKELY_SAME_DEFECT"):
+            return False
+        if relation in ("SAME_DEFECT", "LIKELY_SAME_DEFECT") and not matched_id:
+            return False
+        return attribution in ("PRE_EXISTING", "UNKNOWN_ORIGIN", "INSUFFICIENT_EVIDENCE")
+    allowed_attributions = {
+        "PRE_EXISTING", "FIRST_OBSERVED_IN_INTERVAL", "SUPPORTED_AS_NEW_IN_INTERVAL",
+        "CONTINUATION_OF_PRIOR_DEFECT", "CUSTODY_GAP", "UNKNOWN_ORIGIN",
+        "INSUFFICIENT_EVIDENCE",
+    }
+    return attribution in allowed_attributions and (
+        (relation == "INSUFFICIENT_EVIDENCE" and matched_id == "")
+        or (
+            cond == "IMPROVED"
+            and relation in ("SAME_DEFECT", "LIKELY_SAME_DEFECT")
+            and matched_id != ""
+        )
+    )
 
 
 def _validate_finding_shape(finding, scope: list, candidates_by_component: dict) -> bool:
@@ -1973,7 +2105,7 @@ def _validate_finding_shape(finding, scope: list, candidates_by_component: dict)
     matched_id = finding.get("matched_defect_id", "")
     if matched_id != "" and matched_id not in candidates_by_component.get(cid, []):
         return False
-    return True
+    return _validate_finding_semantics(finding)
 
 
 def _classify_challenge(
@@ -1988,7 +2120,7 @@ def _classify_challenge(
     """Independently retrieves fresh challenge evidence and asks the model
     to re-evaluate the recorded finding against it (section 24). Without
     evidence, or if the evidence is unreachable, this never reaches
-    UPHELD/MODIFIED/OVERTURNED on its own authority -- a challenge is not
+    UPHELD/OVERTURNED on its own authority -- a challenge is not
     granted or denied by rhetoric alone."""
     if reason_code not in CHALLENGE_REASONS:
         return {"result": "INCONCLUSIVE"}
@@ -2019,8 +2151,6 @@ Rules:
   authority.
 - UPHELD: the evidence does not materially contradict the recorded
   finding.
-- MODIFIED: the evidence supports a partial correction but the finding is
-  still substantially valid.
 - OVERTURNED: the evidence directly contradicts the recorded finding
   (e.g. clearly shows the defect is pre-existing when reason_code is
   PRE_EXISTING_EVIDENCE, or clearly shows normal wear when reason_code is

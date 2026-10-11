@@ -244,6 +244,37 @@ def test_challenge_overturned_by_fresh_contradicting_evidence(direct_vm):
     assert c.get_defect(defect_id=did)["status"] == "UNRESOLVED"
 
 
+def test_modified_challenge_is_removed_until_it_has_a_persisted_correction(direct_vm):
+    owner = create_address("owner")
+    c, aid, comps = make_sealed_asset(direct_vm, owner)
+    cid = comps["bumper"]
+    renter = renter_address("renter")
+    _, status = _handover_through_return(
+        c, direct_vm, aid, cid, renter,
+        "Dent.",
+        finding(condition_class="NEW_MINOR_DAMAGE", defect_relation="NEW_DISTINCT_DEFECT",
+                severity="MINOR", attribution_class="SUPPORTED_AS_NEW_IN_INTERVAL"),
+    )
+    did = c.get_asset(asset_id=aid)["defect_ids"][0]
+    before = c.get_defect_history(defect_id=did)
+
+    direct_vm.clear_mocks()
+    direct_vm.mock_web("example.com/partial-correction", {"status": 200, "body": "Severity is uncertain."})
+    # MODIFIED is intentionally not an accepted enum while it carries no
+    # deterministic corrected severity/attribution payload.
+    direct_vm.mock_llm(".*", '{"result": "MODIFIED"}')
+    result = c.challenge_finding(
+        defect_id=did,
+        reason_code="WRONG_SEVERITY",
+        evidence_kind="STRUCTURED_CHECKLIST",
+        source_url="https://example.com/partial-correction",
+        content_hash="hc",
+    )
+    assert result == "INCONCLUSIVE"
+    assert c.get_defect(defect_id=did)["status"] == "OPEN"
+    assert c.get_defect_history(defect_id=did) == before
+
+
 def test_challenge_with_unreachable_evidence_is_external_failure_not_overturned(direct_vm):
     """An unreachable challenge evidence source must fail closed to
     EXTERNAL_FAILURE, never silently becoming OVERTURNED/UPHELD (HP14)."""
